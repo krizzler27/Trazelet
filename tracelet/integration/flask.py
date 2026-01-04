@@ -1,13 +1,12 @@
 import time
 from datetime import datetime, timezone
 from flask import request, g
-import threading
-from core.engine import TraceletEngine
+from tracelet.core.engine import Engine, get_engine
 
 
 class FlaskMiddleware:
-    def __init__(self, engine: TraceletEngine, app=None):
-        self.engine = engine
+    def __init__(self, app=None, engine: Engine = None):
+        self.engine = engine or get_engine()
         self.framework = "flask"
         if app:
             self.init_app(app)
@@ -41,6 +40,6 @@ class FlaskMiddleware:
                 "framework": self.framework
             }
 
-            threading.Thread(target=self.engine.capture, args=(data,)).start()
+            self.engine.start_concurrent_store(data)
             
         return response

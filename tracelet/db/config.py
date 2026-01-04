@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.engine import Engine
 
 # engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # SessionLocal = sessionmaker(bind=engine)
@@ -15,13 +14,6 @@ class DBSetup:
         
         self.engine = self._create_engine_instance()
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
-
-    @event.listens_for(Engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.close()  
 
     def _create_engine_instance(self):
         if self.db_type == "sqlite":
@@ -38,7 +30,6 @@ class DBSetup:
             @event.listens_for(engine, "connect")  # Attaching to THIS engine instance
             def set_sqlite_pragma(dbapi_connection, connection_record):
                 cursor = dbapi_connection.cursor()
-                print("Optimizing SQLite for WAL")
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.close()

@@ -23,7 +23,7 @@ if not settings.configured:
         },
         MIDDLEWARE=[
             "django.middleware.common.CommonMiddleware",
-            "integration.django.DjangoMiddleware", 
+            "tracelet.integration.django.DjangoMiddleware", 
         ],
     )
 # 2. INITIALIZE DJANGO

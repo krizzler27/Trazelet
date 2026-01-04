@@ -1,12 +1,16 @@
-from db.config import SessionLocal
-from db.models import APIs, Metrics, APIStatus
+from tracelet.db.config import SessionLocal
+from tracelet.db.models import APIs, Metrics, APIStatus
 from sqlalchemy import select
-from utils.helper import format_as_seconds
+from tracelet.utils.helper import format_as_seconds
+from .worker import AsyncWorker
 import http
 
-class TraceletEngine:
+_shared_engine_instance = None
+
+class Engine:
     def __init__(self, db_session_factory=SessionLocal):
         self.Session = db_session_factory
+        self.worker = AsyncWorker(max_workers=1)
 
     def capture(self, data):
         """The main entry point for all frameworks"""
@@ -36,6 +40,9 @@ class TraceletEngine:
         }
         
         self._save_to_db(prepared)
+
+    def start_concurrent_store(self, data):
+        self.worker.queue_task(self.capture, data)
 
     def clean_path(self, path):
         path = path.strip()
@@ -71,3 +78,13 @@ class TraceletEngine:
             print(f"Tracelet encountered an Error: {e}")
         finally:
             db.close()
+
+def get_engine():
+    """
+    This is the ONLY way to get the engine. 
+    It ensures we never create more than one.
+    """
+    global _shared_engine_instance
+    if _shared_engine_instance is None:
+        _shared_engine_instance = Engine()
+    return _shared_engine_instance

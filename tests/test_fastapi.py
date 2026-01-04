@@ -1,14 +1,14 @@
 import asyncio
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from core.engine import TraceletEngine
-from integration.fastapi import FastAPIMiddleware 
+from tracelet.core.engine import Engine
+from tracelet.integration.fastapi import FastAPIMiddleware 
 
 app = FastAPI(title="Tracelet Test Suite")
 
 # --- Middleware Registration ---
 # This will wrap every request below
-engine = TraceletEngine() # Create the engine instance once
+engine = Engine() # Create the engine instance once
 app.add_middleware(FastAPIMiddleware, engine=engine) # Pass the engine as a keyword argument here!
 
 # --- Mock Data Models ---

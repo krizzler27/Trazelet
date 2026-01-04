@@ -1,14 +1,13 @@
 import time
 from datetime import datetime, timezone
-import threading
 from django.urls import resolve
-from core.engine import TraceletEngine
+from tracelet.core.engine import Engine, get_engine
 
 class DjangoMiddleware:
-    def __init__(self, get_response):
+    def __init__(self, get_response, engine: Engine = None):
         self.get_response = get_response
-        self.engine = TraceletEngine() 
         self.framework = "django"
+        self.engine = engine or get_engine()
 
     def __call__(self, request):
         start_perf = time.perf_counter()
@@ -37,6 +36,6 @@ class DjangoMiddleware:
             "framework": self.framework
         }
 
-        threading.Thread(target=self.engine.capture, args=(data,)).start()
+        self.engine.start_concurrent_store(data)
 
         return response

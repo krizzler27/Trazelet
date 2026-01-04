@@ -2,7 +2,7 @@ from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 from sqlalchemy import ForeignKey, JSON, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from datetime import datetime, timezone
-from db.config import engine
+from tracelet.db.config import engine
 from enum import Enum
 
 Base = declarative_base()
@@ -49,4 +49,4 @@ def create_tables():
     engine.echo = False
     print("Tables created successfully!!!")
 
-create_tables()
+# create_tables()
