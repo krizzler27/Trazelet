@@ -3,6 +3,7 @@ from sqlalchemy import ForeignKey, JSON, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from datetime import datetime, timezone
 from tracelet.db.config import engine
+from tracelet import settings
 from enum import Enum
 
 Base = declarative_base()
@@ -43,10 +44,13 @@ class Metrics(Base):
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
 
-def create_tables():
-    engine.echo = True
-    Base.metadata.create_all(bind=engine)
-    engine.echo = False
+def create_tables(force_creation=False):
+ 
+    if not settings.enabled or force_creation:
+        engine.echo = True
+        Base.metadata.create_all(bind=engine)
+        engine.echo = False
+        settings.enabled = True
     print("Tables created successfully!!!")
 
-# create_tables()
+create_tables()

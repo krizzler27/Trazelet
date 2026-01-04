@@ -31,11 +31,6 @@ class FastAPIMiddleware(BaseHTTPMiddleware):
             "framework": self.framework
         }
 
-        if not response.background:
-            response.background = BackgroundTasks()
-        
-        response.background.add_task(
-            self.engine.capture, 
-            data
-        )
+        self.engine.start_concurrent_store(data)
+
         return response

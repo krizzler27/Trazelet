@@ -5,11 +5,27 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tracelet"
 version = "0.1.0"
-description = "Lightweight APM for Python"
+description = "Lightweight tracing and performance insights for modern APIs."
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy>=2.0.23",
+    "psycopg2>=2.9.10",
+    "psycopg2-binary>=2.9.0",
+]
+
+[project.optional-dependencies]
+fastapi = [
+    "fastapi>=2.11.7",
+    "uvicorn>=0.24.0",
+]
+flask = [
+    "flask>=3.1.2",
+    "werkzeug>=3.1.0",
+]
+django = [
+    "django>=5.2.9",
+    "djangorestframework>=3.16.1",
 ]
 
 [tool.setuptools]

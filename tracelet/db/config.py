@@ -1,8 +1,6 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-# engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-# SessionLocal = sessionmaker(bind=engine)
 
 class DBSetup:
     def __init__(self, database_url=None, echo=False, connect_args=None):

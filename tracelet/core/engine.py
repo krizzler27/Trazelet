@@ -2,6 +2,7 @@ from tracelet.db.config import SessionLocal
 from tracelet.db.models import APIs, Metrics, APIStatus
 from sqlalchemy import select
 from tracelet.utils.helper import format_as_seconds
+from tracelet.config import settings
 from .worker import AsyncWorker
 import http
 
@@ -10,7 +11,7 @@ _shared_engine_instance = None
 class Engine:
     def __init__(self, db_session_factory=SessionLocal):
         self.Session = db_session_factory
-        self.worker = AsyncWorker(max_workers=1)
+        self.worker = AsyncWorker()
 
     def capture(self, data):
         """The main entry point for all frameworks"""
@@ -42,6 +43,8 @@ class Engine:
         self._save_to_db(prepared)
 
     def start_concurrent_store(self, data):
+        if not settings.enabled:
+            return
         self.worker.queue_task(self.capture, data)
 
     def clean_path(self, path):

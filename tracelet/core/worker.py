@@ -1,11 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
+from tracelet.config import settings
 import atexit
 
 class AsyncWorker:
-    def __init__(self, max_workers=1):
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        # Ensure cleanup happens
-        atexit.register(self.stop)
+    def __init__(self):
+        self._executor = ThreadPoolExecutor(max_workers=settings.max_workers)
+        atexit.register(self.stop) # Ensure cleanup happens
 
     def queue_task(self, task_func, *args):
         """Submit a task to the background."""
