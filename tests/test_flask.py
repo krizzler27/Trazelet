@@ -2,13 +2,14 @@ import time
 from flask import Flask, jsonify, request, abort
 from tracelet.core.engine import Engine
 from tracelet.integration.flask import FlaskMiddleware 
+import tracelet
 
 app = Flask(__name__)
 
 # --- Middleware Registration ---
 # Assuming your TraceletFlask class follows the init_app or constructor pattern
-engine = Engine()
-tracelet = FlaskMiddleware(app=app, engine=engine)
+tracelet.init()
+tracelet = FlaskMiddleware(app=app)
 
 # --- Test Routes ---
 

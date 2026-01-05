@@ -3,10 +3,10 @@ from sqlalchemy.orm import sessionmaker
 
 
 class DBSetup:
-    def __init__(self, database_url=None, echo=False, connect_args=None):
-        self.database_url = database_url or "sqlite:///tracelet.db"
-        self.connect_args = connect_args or {}
-        self.echo = echo
+    def __init__(self, db_config={}):
+        self.database_url = db_config.get('db_url', "sqlite:///tracelet.db")
+        self.connect_args = db_config.get('connect_args', {})
+        self.echo = db_config.get('echo', False)
         
         self.db_type = "postgres" if "postgres" in self.database_url.lower() else "sqlite"
         
@@ -33,13 +33,3 @@ class DBSetup:
                 cursor.close()
 
         return engine
-
-db_instance = DBSetup() 
-
-engine = db_instance.engine
-SessionLocal = db_instance.SessionLocal
-
-
-# Example usage for the user:
-# Option A: db = DBSetup() -> Uses sentinel_metrics.db
-# Option B: db = DBSetup("postgresql://user:pass@localhost/db") -> Uses Postgres

@@ -2,7 +2,10 @@ import os
 import time
 from django.conf import settings
 import django
+import tracelet
 
+
+tracelet.init()
 
 if not settings.configured:
     settings.configure(

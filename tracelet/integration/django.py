@@ -36,6 +36,6 @@ class DjangoMiddleware:
             "framework": self.framework
         }
 
-        self.engine.start_concurrent_store(data)
+        self.engine.capture(data)
 
         return response

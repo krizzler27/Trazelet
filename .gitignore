@@ -213,3 +213,5 @@ __marimo__/
 pyproject.example.toml
 EVALUATION_REPORT.md
 .vscode
+Tracker.md
+.cursor

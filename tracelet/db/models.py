@@ -2,8 +2,6 @@ from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 from sqlalchemy import ForeignKey, JSON, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from datetime import datetime, timezone
-from tracelet.db.config import engine
-from tracelet import settings
 from enum import Enum
 
 Base = declarative_base()
@@ -45,12 +43,19 @@ class Metrics(Base):
 
 
 def create_tables(force_creation=False):
- 
-    if not settings.enabled or force_creation:
-        engine.echo = True
-        Base.metadata.create_all(bind=engine)
-        engine.echo = False
-        settings.enabled = True
-    print("Tables created successfully!!!")
-
-create_tables()
+    from tracelet import settings
+    
+    # Check if init() was called
+    if not hasattr(settings, 'engine'):
+        raise RuntimeError(
+            "Tracelet not initialized. Please call tracelet.init() before creating tables."
+        )
+    
+    engine = settings.engine
+    if not settings.tables_created or force_creation:
+        if settings.enabled:
+            engine.echo = True
+            Base.metadata.create_all(bind=engine)
+            engine.echo = False
+            settings.tables_created = True
+            print("Tables created successfully!!!")
