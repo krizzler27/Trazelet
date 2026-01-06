@@ -1,11 +1,11 @@
 import time
 from datetime import datetime, timezone
 from flask import request, g
-from tracelet.core.engine import Engine, get_engine
+from tracelet.core.engine import _Engine, get_engine
 
 
 class FlaskMiddleware:
-    def __init__(self, app=None, engine: Engine = None):
+    def __init__(self, app=None, engine: _Engine = None):
         self.engine = engine or get_engine()
         self.framework = "flask"
         if app:

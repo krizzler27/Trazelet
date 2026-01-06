@@ -8,7 +8,7 @@ import time
 import threading
 from datetime import datetime, timezone
 import tracelet
-from tracelet.core.engine import Engine, get_engine
+from tracelet.core.engine import get_engine
 
 # Test configuration
 USER = "kriz"
@@ -41,11 +41,9 @@ print("\n[TEST 2] Singleton Pattern Test")
 print("-" * 60)
 engine1 = get_engine()
 engine2 = get_engine()
-engine3 = Engine()
 
 print(f"[INFO] get_engine() instance 1: {id(engine1)}")
 print(f"[INFO] get_engine() instance 2: {id(engine2)}")
-print(f"[INFO] Engine() instance 3: {id(engine3)}")
 
 if id(engine1) == id(engine2):
     print("[PASS] Singleton pattern: get_engine() returns same instance")
@@ -141,24 +139,9 @@ if errors:
 else:
     print("[PASS] Thread safety: No errors in concurrent captures")
 
-# Test 6: Verify Engine Instance Consistency
-print("\n[TEST 6] Engine Instance Consistency Test")
-print("-" * 60)
 
-# Get engine from different places
-engine_from_get = get_engine()
-engine_from_new = Engine()
-
-print(f"[INFO] get_engine() id: {id(engine_from_get)}")
-print(f"[INFO] Engine() id: {id(engine_from_new)}")
-
-if id(engine_from_get) == id(engine_from_new):
-    print("[PASS] Singleton: get_engine() and Engine() return same instance")
-else:
-    print("[NOTE] get_engine() uses singleton, Engine() creates new instance (by design)")
-
-# Test 7: Verify Settings Consistency
-print("\n[TEST 7] Settings Consistency Test")
+# Test 6: Verify Settings Consistency
+print("\n[TEST 6] Settings Consistency Test")
 print("-" * 60)
 
 print(f"[INFO] settings.engine id: {id(tracelet.settings.engine)}")

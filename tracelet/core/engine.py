@@ -7,10 +7,11 @@ import http
 import queue
 import threading
 import atexit
+import uuid
 
 _shared_engine_instance = None
 
-class Engine:
+class _Engine:
     def __init__(self, db_session_factory=None):
         # Lazy access to avoid evaluating settings.SessionLocal at class definition time
         if db_session_factory is None:
@@ -99,7 +100,6 @@ class Engine:
         except ValueError:
             detail = "Unknown Status"
 
-        unique_id = f"{data['start_dt'].timestamp()}-{data['api_url']}-{data['end_dt'].timestamp()}"
         elapsed_secs = float(format_as_seconds(data["elapsed"]))
         elapsed_ms = elapsed_secs*1000
 
@@ -113,7 +113,7 @@ class Engine:
         
         # Prepare metric data (ready for bulk insert)
         prepared = {
-            "unique_id": unique_id,
+            "unique_id": str(uuid.uuid4()),
             "api_url_id": api_id,
             "requested_time": data["start_dt"],
             "responded_time": data["end_dt"],
@@ -173,12 +173,28 @@ class Engine:
             session.close()
     
     def shutdown(self):
-        """Flush remaining queue items on shutdown (independent of worker shutdown)."""
-        if hasattr(self, '_timer'):
-            self._timer.cancel()
-        # Flush any remaining items in queue (submits tasks to worker)
-        self.flush_buffer()
-        # Worker's own atexit handler will wait for these tasks to complete
+            """The Master Shutdown Sequence."""
+            # Use a flag to prevent double-shutdown if called manually
+            if getattr(self, '_in_shutdown', False):
+                print("Yes")
+                return
+            self._in_shutdown = True
+
+            try:
+                if hasattr(self, '_timer'): # 1. Stop the heartbeat timer immediately
+                    self._timer.cancel()
+
+                # 2. Check if the worker's executor is still accepting tasks
+                # This is the key to stopping that 'RuntimeError'
+                if hasattr(self, 'worker') and self.worker._executor:
+                    if not self.worker._executor._shutdown: # checkinf if the executor is NOT shut down before flushing
+                        self.flush_buffer()
+                    
+                    self.worker.stop() # 3. Gracefully stop the worker
+            except (RuntimeError, AttributeError, ImportError) as e:
+                print("Facing error but shutting down the system.", e)
+            finally:
+                print("Tracelet: Shutdown complete.")
 
 def get_engine():
     """
@@ -187,5 +203,5 @@ def get_engine():
     """
     global _shared_engine_instance
     if _shared_engine_instance is None:
-        _shared_engine_instance = Engine()
+        _shared_engine_instance = _Engine()
     return _shared_engine_instance

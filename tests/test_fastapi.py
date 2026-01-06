@@ -1,24 +1,16 @@
 import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from tracelet.core.engine import Engine
 from tracelet.integration.fastapi import FastAPIMiddleware 
 import tracelet
 
-USER = "user"
-PASSWORD = "password"
-postgres_db_url = f'postgresql+psycopg2://{USER}:{PASSWORD}@localhost:5432/tracelet'
-db_config = {
-    "db_url" : postgres_db_url,
-    "echo": False
-}
+db_config = {} #! Setup Db Config before Running
 tracelet.init(max_workers=2, enabled=True, db_config=db_config)
 app = FastAPI(title="Tracelet Test Suite")
 
 # --- Middleware Registration ---
 # This will wrap every request below
-engine = Engine() # Create the engine instance once
-app.add_middleware(FastAPIMiddleware, engine=engine) # Pass the engine as a keyword argument here!
+app.add_middleware(FastAPIMiddleware)
 
 # --- Mock Data Models ---
 class Item(BaseModel):

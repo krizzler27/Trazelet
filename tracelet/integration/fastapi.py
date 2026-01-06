@@ -2,10 +2,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request, BackgroundTasks
 import time
 from datetime import datetime, timezone
-from tracelet.core.engine import Engine, get_engine
+from tracelet.core.engine import _Engine, get_engine
 
 class FastAPIMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, engine: Engine = None):
+    def __init__(self, app, engine: _Engine = None):
         super().__init__(app)
         self.engine = engine or get_engine()
         self.framework = "fastapi"

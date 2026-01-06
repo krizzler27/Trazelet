@@ -4,8 +4,8 @@ from django.conf import settings
 import django
 import tracelet
 
-
-tracelet.init()
+db_config = {} #! Setup Db Config before Running
+tracelet.init(max_workers=2, enabled=True, db_config=db_config)
 
 if not settings.configured:
     settings.configure(
@@ -32,12 +32,10 @@ if not settings.configured:
 # 2. INITIALIZE DJANGO
 django.setup()
 
-from datetime import datetime, timezone
 from django.conf import settings
 from django.core.management import execute_from_command_line
 from django.http import JsonResponse
 from django.urls import path
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 

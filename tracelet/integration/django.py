@@ -1,10 +1,10 @@
 import time
 from datetime import datetime, timezone
 from django.urls import resolve
-from tracelet.core.engine import Engine, get_engine
+from tracelet.core.engine import _Engine, get_engine
 
 class DjangoMiddleware:
-    def __init__(self, get_response, engine: Engine = None):
+    def __init__(self, get_response, engine: _Engine = None):
         self.get_response = get_response
         self.framework = "django"
         self.engine = engine or get_engine()
