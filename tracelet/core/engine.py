@@ -54,12 +54,16 @@ class _Engine:
     def _get_or_create_api_id(self, api_url_path, framework):
         """Get or create API ID with thread-safe caching (Single Save)."""
         cache_key = (api_url_path, framework)
+
+        # 1. First check WITHOUT a lock (Lightning fast)
+        if cache_key in self._api_cache:
+            return self._api_cache[cache_key]
         
+        # 2. If it's a miss, grab the lock to do the DB work safely
         with self._cache_lock:
-            # Check cache first (fast path)
+            # Re-check inside the lock in case another thread just created it
             if cache_key in self._api_cache:
-                return self._api_cache[cache_key]
-            
+                return self._api_cache[cache_key]           
             # Cache miss - hit the database (single save)
             session = self.Session()
             try:
