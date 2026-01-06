@@ -4,7 +4,13 @@ from pydantic import BaseModel
 from tracelet.integration.fastapi import FastAPIMiddleware 
 import tracelet
 
-db_config = {} #! Setup Db Config before Running
+USER = "kriz"
+PASSWORD = "root"
+postgres_db_url = f'postgresql+psycopg2://{USER}:{PASSWORD}@localhost:5432/tracelet'
+db_config = {
+    "db_url" : postgres_db_url,
+    "echo": False
+}
 tracelet.init(max_workers=2, enabled=True, db_config=db_config)
 app = FastAPI(title="Tracelet Test Suite")
 
@@ -54,4 +60,4 @@ def compute(number: int):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8012)

@@ -212,6 +212,7 @@ __marimo__/
 *.db-shm
 pyproject.example.toml
 EVALUATION_REPORT.md
-.vscode
 Tracker.md
+AUDIT_REPORT.md
+.vscode
 .cursor

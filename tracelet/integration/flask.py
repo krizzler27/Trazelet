@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timezone
 from flask import request, g
 from tracelet.core.engine import _Engine, get_engine
+from tracelet.logger_config import logger
 
 
 class FlaskMiddleware:
@@ -22,9 +23,9 @@ class FlaskMiddleware:
         g._tracelet_start_dt = datetime.now(timezone.utc)
 
     def _after_request(self, response):
-        if hasattr(g, '_tracelet_start_perf'):
+        try:
             elapsed = time.perf_counter() - g._tracelet_start_perf
-            
+
             #  --- Path Normalization ---
             if request.url_rule:
                 path = request.url_rule.rule
@@ -41,5 +42,8 @@ class FlaskMiddleware:
             }
 
             self.engine.capture(data)
-            
+
+        except Exception as e:
+            logger.error("Unexpected error in Flask Middleware: %s", e, exc_info=True)
+
         return response

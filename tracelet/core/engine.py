@@ -3,6 +3,7 @@ from sqlalchemy import select
 from tracelet.utils.helper import format_as_seconds, clean_url_path
 from tracelet.config import settings
 from .worker import AsyncWorker
+from tracelet.logger_config import logger
 import http
 import queue
 import threading
@@ -78,14 +79,14 @@ class _Engine:
                     session.add(api_obj)
                     session.commit()
                     session.refresh(api_obj)
-                
+
                 api_id = api_obj.api_id
-                # Store in cache for future lookups
-                self._api_cache[cache_key] = api_id
+                self._api_cache[cache_key] = api_id # Store in cache for future lookups
                 return api_id
+            
             except Exception as e:
                 session.rollback()
-                print(f"Tracelet API lookup Error: {e}")
+                logger.error("Tracelet API lookup error: %s", e, exc_info=True)
                 return None
             finally:
                 session.close()
@@ -94,50 +95,60 @@ class _Engine:
         """The main entry point for all frameworks - Non-blocking."""
         if not settings.enabled:
             return
-        
-        # Determine success/fail
-        status_code = data["response_status"]
-        status = APIStatus.SUCCESS if 200 <= status_code < 300 else APIStatus.FAILED
-        
+
         try:
-            detail = http.HTTPStatus(status_code).phrase
-        except ValueError:
-            detail = "Unknown Status"
+            # Determine success/fail
+            status_code = data["response_status"]
+            status = APIStatus.SUCCESS if 200 <= status_code < 300 else APIStatus.FAILED
+            
+            try:
+                detail = http.HTTPStatus(status_code).phrase
+            except ValueError:
+                detail = "Unknown Status"
 
-        elapsed_secs = float(format_as_seconds(data["elapsed"]))
-        elapsed_ms = elapsed_secs*1000
+            elapsed_secs = float(format_as_seconds(data["elapsed"]))
+            elapsed_ms = elapsed_secs*1000
 
-        api_url_path = clean_url_path(data["api_url"])
-        framework = data["framework"]
-        
-        # Get API ID immediately (single save with cache) - ensures FK is ready
-        api_id = self._get_or_create_api_id(api_url_path, framework)
-        if api_id is None:
-            return  # Skip if API lookup failed
-        
-        # Prepare metric data (ready for bulk insert)
-        prepared = {
-            "unique_id": str(uuid.uuid4()),
-            "api_url_id": api_id,
-            "requested_time": data["start_dt"],
-            "responded_time": data["end_dt"],
-            "time_taken_secs": elapsed_secs,
-            "time_taken_ms": elapsed_ms,
-            "response_json": {"status_code": status_code, "detail": detail},
-            "response_status": status
-        }
-        
-        # Put in queue (lightning fast, non-blocking)
-        self._queue.put(prepared)
-        
-        # Trigger flush if batch size reached
-        if self._queue.qsize() >= getattr(settings, 'batch_size', 50):
-            self.flush_buffer()
+            api_url_path = clean_url_path(data["api_url"])
+            framework = data["framework"]
+            
+            # Get API ID immediately (single save with cache) - ensures FK is ready
+            api_id = self._get_or_create_api_id(api_url_path, framework)
+            if api_id is None:
+                return  # Skip if API lookup failed
+            
+            # Prepare metric data (ready for bulk insert)
+            prepared = {
+                "unique_id": str(uuid.uuid4()),
+                "api_url_id": api_id,
+                "requested_time": data["start_dt"],
+                "responded_time": data["end_dt"],
+                "time_taken_secs": elapsed_secs,
+                "time_taken_ms": elapsed_ms,
+                "response_json": {"status_code": status_code, "detail": detail},
+                "response_status": status
+            }
+            
+            # Put in queue (lightning fast, non-blocking)
+            self._queue.put(prepared)
+            
+            # Trigger flush if batch size reached
+            if self._queue.qsize() >= getattr(settings, 'batch_size', 50):
+                self.flush_buffer()
+        except Exception as e:
+            logger.error("Exception occurred during metrics capture: %s", e, exc_info=True)
     
     def flush_buffer(self):
-        """Extract items from queue and send to worker for batch processing."""
+        """Extract items from queue and send to worker for batch processing.
+        
+        Thread-safe implementation that handles race conditions where items
+        may be added to the queue while flushing.
+        """
         batch = []
-        while not self._queue.empty():
+        # Use get_nowait with exception handling instead of empty() check
+        # This avoids race conditions where queue becomes non-empty between
+        # empty() check and get_nowait() call
+        while True:
             try:
                 batch.append(self._queue.get_nowait())
             except queue.Empty:
@@ -160,7 +171,7 @@ class _Engine:
             session.commit()
         except Exception as e:
             session.rollback()
-            print(f"Tracelet Bulk Save Error: {e}")
+            logger.error("Tracelet Bulk Save Error: %s", e, exc_info=True)
         finally:
             session.close()
     
@@ -172,7 +183,7 @@ class _Engine:
             session.commit()
         except Exception as e:
             session.rollback()
-            print(f"Tracelet Single Save Error: {e}")
+            logger.error("Tracelet Single Save Error: %s", e, exc_info=True)
         finally:
             session.close()
     
@@ -180,7 +191,7 @@ class _Engine:
             """The Master Shutdown Sequence."""
             # Use a flag to prevent double-shutdown if called manually
             if getattr(self, '_in_shutdown', False):
-                print("Yes")
+                logger.debug("Shutdown already in progress; skipping duplicate call.")
                 return
             self._in_shutdown = True
 
@@ -191,14 +202,14 @@ class _Engine:
                 # 2. Check if the worker's executor is still accepting tasks
                 # This is the key to stopping that 'RuntimeError'
                 if hasattr(self, 'worker') and self.worker._executor:
-                    if not self.worker._executor._shutdown: # checkinf if the executor is NOT shut down before flushing
+                    if not self.worker._executor._shutdown:  # Check if executor is NOT shut down before flushing
                         self.flush_buffer()
                     
                     self.worker.stop() # 3. Gracefully stop the worker
-            except (RuntimeError, AttributeError, ImportError) as e:
-                print("Facing error but shutting down the system.", e)
+            except Exception as e:
+                logger.error("Error during shutdown: %s", e, exc_info=True)
             finally:
-                print("Tracelet: Shutdown complete.")
+                logger.info("Tracelet: Shutdown complete.")
 
 def get_engine():
     """

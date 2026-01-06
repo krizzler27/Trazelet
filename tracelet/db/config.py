@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from tracelet.logger_config import logger
 
 
 class DBSetup:
@@ -17,19 +18,28 @@ class DBSetup:
         if self.db_type == "sqlite":
             self.connect_args.setdefault("check_same_thread", False)
         
-        engine =  create_engine(
-            self.database_url, 
-            connect_args=self.connect_args, 
-            echo=self.echo
-        )
+        try:
+            engine =  create_engine(
+                self.database_url, 
+                connect_args=self.connect_args, 
+                echo=self.echo
+            )
+        except Exception as e:
+            logger.error("Failed to create DB engine for URL: %s", e)
+            raise RuntimeError(f"Failed to initialize database engine: {e}")
 
         # Apply WAL mode only if it's SQLite
         if self.db_type == "sqlite":
             @event.listens_for(engine, "connect")  # Attaching to THIS engine instance
             def set_sqlite_pragma(dbapi_connection, connection_record):
                 cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.close()
+                try:
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
+                except Exception as e:
+                    logger.error("Exception occurred while applying SQLite PRAGMA: %s", e)
+                finally:
+                    cursor.close()
+
 
         return engine

@@ -3,6 +3,7 @@ from sqlalchemy import ForeignKey, JSON, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from datetime import datetime, timezone
 from enum import Enum
+from tracelet.logger_config import logger
 
 Base = declarative_base()
 
@@ -44,18 +45,24 @@ class Metrics(Base):
 
 def create_tables(force_creation=False):
     from tracelet import settings
-    
+
     # Check if init() was called
     if not hasattr(settings, 'engine'):
         raise RuntimeError(
             "Tracelet not initialized. Please call tracelet.init() before creating tables."
         )
-    
+
     engine = settings.engine
     if not settings.tables_created or force_creation:
         if settings.enabled:
-            engine.echo = True
-            Base.metadata.create_all(bind=engine)
-            engine.echo = False
-            settings.tables_created = True
-            print("Tables created successfully!!!")
+            prev_echo = getattr(engine, 'echo', False)
+            try:
+                engine.echo = True
+                Base.metadata.create_all(bind=engine)
+                settings.tables_created = True
+                logger.info("Tables created successfully!!!")
+            except Exception as e:
+                logger.error("Failed to create tables: %s", e)
+                raise RuntimeError(f"Failed to create tables: {e}")
+            finally:
+                engine.echo = prev_echo
