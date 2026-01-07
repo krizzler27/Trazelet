@@ -1,84 +1,164 @@
-import os
 import time
-from django.conf import settings
+
+import pytest  # type: ignore
 import django
+from django.conf import settings
+from django.http import JsonResponse
+from django.test import Client
+from django.urls import path
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
 import tracelet
 
-db_config = {} #! Setup Db Config before Running
-tracelet.init(max_workers=2, enabled=True, db_config=db_config)
 
-if not settings.configured:
-    settings.configure(
-        DEBUG=True,
-        SECRET_KEY="test-key",
-        ROOT_URLCONF=__name__,
-        # 1. Add this to fix the AppLabel error
-        INSTALLED_APPS=[
-            'django.contrib.contenttypes',
-            'rest_framework',
-        ],
-        # 2. Add a dummy database so DRF has a place to "look" for models
-        DATABASES={
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': ':memory:',
-            }
-        },
-        MIDDLEWARE=[
-            "django.middleware.common.CommonMiddleware",
-            "tracelet.integration.django.DjangoMiddleware", 
-        ],
-    )
-# 2. INITIALIZE DJANGO
-django.setup()
+# --- Django + Tracelet setup -----------------------------------------------
 
-from django.conf import settings
-from django.core.management import execute_from_command_line
-from django.http import JsonResponse
-from django.urls import path
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
+def setup_django(db_url: str | None = None) -> None:
+    """
+    Configure Django settings and initialize Tracelet middleware.
 
-# 2. DEFINING THE SAME ROUTES AS FASTAPI/FLASK
+    Safe to call multiple times; configuration only happens once.
+    """
+    if db_url is None:
+        db_url = "sqlite:///:memory:"
+
+    db_config = {"db_url": db_url, "echo": False}
+    tracelet.init(max_workers=2, enabled=True, db_config=db_config)
+
+    if not settings.configured:
+        settings.configure(
+            DEBUG=True,
+            SECRET_KEY="test-key",
+            ROOT_URLCONF=__name__,
+            INSTALLED_APPS=[
+                "django.contrib.contenttypes",
+                "rest_framework",
+            ],
+            DATABASES={
+                "default": {
+                    "ENGINE": "django.db.backends.sqlite3",
+                    "NAME": ":memory:",
+                }
+            },
+            MIDDLEWARE=[
+                "django.middleware.common.CommonMiddleware",
+                "tracelet.integration.django.DjangoMiddleware",
+            ],
+        )
+        django.setup()
+
+
+# --- Views & URLConf --------------------------------------------------------
 
 def root(request):
     """Basic fast route to test SUCCESS status."""
     return JsonResponse({"message": "Tracelet is watching Django"})
 
+
 def slow_api(request):
-    """Simulates a 3s delay."""
-    time.sleep(3)
+    """Simulates a 3s delay (kept short for tests)."""
+    time.sleep(0.01)
     return JsonResponse({"status": "completed", "waited": "3s"})
+
 
 def trigger_error(request):
     """Simulates a 500 Server Error."""
     return JsonResponse({"error": "Simulated Server Crash"}, status=500)
 
+
 def not_found(request):
     """Simulates a 404 missing resource."""
     return JsonResponse({"detail": "Resource missing"}, status=404)
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def create_item(request):
     """Tests POST request handling via DRF."""
     name = request.data.get("name", "Unknown")
     return Response({"message": f"Item {name} created", "data": request.data})
+
 
 def compute(request, number):
     """Simulates CPU work and tests normalization."""
     result = sum(i * i for i in range(number))
     return JsonResponse({"result": result})
 
-# 3. URL PATTERNS (The "Normalization" test)
+
 urlpatterns = [
     path("", root),
     path("slow", slow_api),
     path("error", trigger_error),
     path("not-found", not_found),
     path("items", create_item),
-    path("heavy-compute/<int:number>", compute), # Normalization: /heavy-compute/<int:number>
+    path("heavy-compute/<int:number>", compute),
 ]
 
+
+# --- Pytest integration tests ----------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def reset_tracelet_engine():
+    """Ensure the Tracelet engine is shut down between tests in this module."""
+    yield
+    try:
+        from tracelet.core.engine import get_engine
+
+        engine = get_engine()
+        engine.shutdown()
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def django_client():
+    setup_django()
+    return Client()
+
+
+class TestDjangoIntegration:
+    """Integration tests for the Django example app."""
+
+    def test_root_endpoint(self, django_client: Client):
+        response = django_client.get("/")
+        assert response.status_code == 200
+        assert response.json()["message"]
+
+    def test_slow_endpoint(self, django_client: Client):
+        response = django_client.get("/slow")
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+
+    def test_error_endpoint(self, django_client: Client):
+        response = django_client.get("/error")
+        assert response.status_code == 500
+        assert response.json()["error"] == "Simulated Server Crash"
+
+    def test_not_found_endpoint(self, django_client: Client):
+        response = django_client.get("/not-found")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Resource missing"
+
+    def test_create_item_endpoint(self, django_client: Client):
+        payload = {"name": "Widget", "value": 42}
+        response = django_client.post("/items", payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "Item Widget created"
+        assert data["data"]["name"] == "Widget"
+
+    def test_heavy_compute_endpoint(self, django_client: Client):
+        response = django_client.get("/heavy-compute/10")
+        assert response.status_code == 200
+        assert "result" in response.json()
+
+
+# --- Manual server entrypoint ----------------------------------------------
+
 if __name__ == "__main__":
+    from django.core.management import execute_from_command_line
+
+    setup_django()
     print("\n--- Django running on http://127.0.0.1:7001 ---")
     execute_from_command_line(["manage.py", "runserver", "7001"])

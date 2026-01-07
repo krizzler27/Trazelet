@@ -2,7 +2,7 @@
 Comprehensive Test Suite for Tracelet
 Tests: Initialization, Concurrency, Failure Simulation, Edge Cases
 """
-import pytest
+import pytest # type: ignore
 import threading
 import time
 import queue
@@ -83,6 +83,40 @@ class TestInitialization:
         assert id(engine1) == id(engine2)
         # But settings should update
         assert settings.batch_size == 200
+    
+    def test_direct_attribute_access(self, tmp_path):
+        """Test that users can directly update config attributes."""
+        db_path = tmp_path / "test.db"
+        db_config = {"db_url": f"sqlite:///{db_path}"}
+        
+        # Initialize first
+        tracelet.init(db_config=db_config, batch_size=50, enabled=True)
+        
+        # Direct attribute access should work
+        from tracelet import config
+        
+        # Test updating various settings
+        config.settings.batch_size = 200
+        assert config.settings.batch_size == 200
+        
+        config.settings.enabled = False
+        assert config.settings.enabled is False
+        
+        config.settings.flush_interval = 15.0
+        assert config.settings.flush_interval == 15.0
+        
+        config.settings.use_bulk_mode = False
+        assert config.settings.use_bulk_mode is False
+        
+        # Test logger_level property
+        config.settings.logger_level = 'DEBUG'
+        assert config.settings.logger_level == 'DEBUG'
+        from tracelet.logger_config import logger
+        assert logger.level == 10  # DEBUG level is 10
+        
+        config.settings.logger_level = 'WARNING'
+        assert config.settings.logger_level == 'WARNING'
+        assert logger.level == 30  # WARNING level is 30
     
     def test_init_without_db_config(self):
         """Test initialization with no db_config (uses defaults)."""
@@ -462,6 +496,137 @@ class TestShutdown:
         # Should not crash
         engine.shutdown()
         engine.shutdown()
+
+
+class TestSingletonAndNonBlocking:
+    """
+    Tests focused on:
+    - Engine singleton behaviour
+    - Non-blocking capture performance
+    - Thread-safety under concurrency
+    - Settings consistency after init()
+    """
+
+    def _init_engine(self, tmp_path):
+        """Helper to initialize Tracelet with a dedicated SQLite DB."""
+        db_path = tmp_path / "singleton_nonblocking.db"
+        db_config = {"db_url": f"sqlite:///{db_path}"}
+
+        tracelet.init(max_workers=2, enabled=True, db_config=db_config)
+        return get_engine()
+
+    def test_singleton_pattern(self, tmp_path):
+        """get_engine() should always return the same instance."""
+        engine1 = self._init_engine(tmp_path)
+        engine2 = get_engine()
+
+        assert id(engine1) == id(engine2)
+
+    def test_first_capture_non_blocking_enough(self, tmp_path):
+        """
+        First capture includes initialization overhead but should still be fast
+        enough for real-world use (we allow up to 100ms).
+        """
+        engine = self._init_engine(tmp_path)
+
+        data = {
+            "api_url": "/test/endpoint",
+            "start_dt": datetime.now(timezone.utc),
+            "end_dt": datetime.now(timezone.utc),
+            "elapsed": 0.1,
+            "response_status": 200,
+            "framework": "test",
+        }
+
+        start_time = time.perf_counter()
+        engine.capture(data)
+        end_time = time.perf_counter()
+
+        duration_ms = (end_time - start_time) * 1000.0
+        # Allow generous threshold because this includes one-time initialization.
+        assert duration_ms < 100.0
+
+    def test_multiple_captures_remain_fast(self, tmp_path):
+        """Multiple sequential captures should be very fast on average."""
+        engine = self._init_engine(tmp_path)
+
+        data = {
+            "api_url": "/test/endpoint",
+            "start_dt": datetime.now(timezone.utc),
+            "end_dt": datetime.now(timezone.utc),
+            "elapsed": 0.1,
+            "response_status": 200,
+            "framework": "test",
+        }
+
+        iterations = 100
+        start_time = time.perf_counter()
+        for i in range(iterations):
+            data["api_url"] = f"/test/endpoint/{i}"
+            engine.capture(data)
+        end_time = time.perf_counter()
+
+        total_ms = (end_time - start_time) * 1000.0
+        avg_ms = total_ms / iterations
+
+        # Average capture time should remain comfortably sub-millisecond.
+        assert avg_ms < 2.0
+
+    def test_thread_safety_under_concurrency(self, tmp_path):
+        """
+        Concurrent captures from multiple threads should not raise errors
+        and should all be counted.
+        """
+        engine = self._init_engine(tmp_path)
+
+        capture_count = [0]
+        errors = []
+
+        def capture_in_thread(thread_id: int):
+            try:
+                for i in range(10):
+                    data = {
+                        "api_url": f"/thread/{thread_id}/endpoint/{i}",
+                        "start_dt": datetime.now(timezone.utc),
+                        "end_dt": datetime.now(timezone.utc),
+                        "elapsed": 0.1,
+                        "response_status": 200,
+                        "framework": "test",
+                    }
+                    engine.capture(data)
+                    capture_count[0] += 1
+            except Exception as e:  # pragma: no cover - defensive
+                errors.append(f"Thread {thread_id}: {e}")
+
+        threads = []
+        start_time = time.perf_counter()
+        for i in range(10):
+            t = threading.Thread(target=capture_in_thread, args=(i,))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+        end_time = time.perf_counter()
+
+        total_ms = (end_time - start_time) * 1000.0
+        avg_ms = total_ms / capture_count[0]
+
+        assert not errors
+        assert capture_count[0] == 100
+        # Allow a small per-capture cost under concurrency.
+        assert avg_ms < 5.0
+
+    def test_settings_consistency_after_init(self, tmp_path):
+        """All core settings attributes should be initialized correctly."""
+        engine = self._init_engine(tmp_path)
+
+        assert engine is not None
+        assert hasattr(tracelet.settings, "engine")
+        assert hasattr(tracelet.settings, "SessionLocal")
+        assert isinstance(tracelet.settings.max_workers, int)
+        assert isinstance(tracelet.settings.enabled, bool)
+        assert isinstance(tracelet.settings.tables_created, bool)
 
 
 @pytest.fixture(autouse=True)

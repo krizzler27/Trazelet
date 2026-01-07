@@ -18,6 +18,7 @@ class TraceletConfig:
         
         db = self.configure_db(db_config)
         self.configure_logger(logger_level)
+        self._logger_level = logger_level
         
         if max_workers >= 1 and db.db_type == 'postgres':
             self.max_workers = max_workers
