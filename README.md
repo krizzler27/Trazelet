@@ -64,6 +64,45 @@ Most developers don't know their API is slow until a user complains. Enterprise 
 
 ## 🚀 Quick Start
 
+### Repo Structure
+
+```
+reports
+├── Audit_report.md
+├── Testing_report.md
+├── Tracker.md
+tests
+├── __init__.py
+├── test_comprehensive.py
+├── test_django.py
+├── test_fastapi.py
+├── test_flask.py
+tracelet
+├── __init__.py
+├── config.py
+├── core
+│   ├── __init__.py
+│   ├── engine.py
+│   ├── worker.py
+├── db
+│   ├── __init__.py
+│   ├── config.py
+│   ├── models.py
+├── integration
+│   ├── __init__.py
+│   ├── django.py
+│   ├── fastapi.py
+│   ├── flask.py
+├── logger_config.py
+├── utils
+│   ├── helper.py
+tui
+├── cli_app.py
+.gitignore
+pyproject.toml
+README.md
+```
+
 ### Installation
 
 ```bash

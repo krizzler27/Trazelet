@@ -1,9 +1,12 @@
-from tracelet.db.models import APIs, Metrics, APIStatus
+from tracelet.db.models import Endpoints, Metrics, Buckets, EndpointStatus
 from sqlalchemy import select
-from tracelet.utils.helper import format_as_seconds, clean_url_path
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from tracelet.utils.helper import clean_url_path, get_latency_bucket
 from tracelet.config import settings
 from .worker import AsyncWorker
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
+from collections import defaultdict
 import http
 import queue
 import threading
@@ -24,18 +27,13 @@ class _Engine:
         self.Session = db_session_factory
         self.worker = AsyncWorker()
         
-        # Thread-safe queue for buffering metrics
         self._queue = queue.Queue()
         
-        # API cache (Key: (api_url_path, framework) -> Value: api_id)
-        self._api_cache = {}
+        # endpoint cache (Key: (path, framework) -> Value: endpoint_id)
+        self._endpoint_cache = {}
         self._cache_lock = threading.Lock()
         
-        # Start heartbeat timer for periodic flush
         self._schedule_flush()
-        
-        # Register shutdown to flush queue (independent of worker shutdown)
-        # Note: atexit calls in reverse order, so Engine.shutdown runs before Worker.stop
         atexit.register(self.shutdown)
     
     def _schedule_flush(self):
@@ -43,6 +41,7 @@ class _Engine:
         if not settings.enabled:
             return
         interval = getattr(settings, 'flush_interval', 5.0)
+        logger.debug(f"Schedule for flush started. Flush starts in {interval}s")
         self._timer = threading.Timer(interval, self._heartbeat_flush)
         self._timer.daemon = True
         self._timer.start()
@@ -52,41 +51,37 @@ class _Engine:
         self.flush_buffer()
         self._schedule_flush()
     
-    def _get_or_create_api_id(self, api_url_path, framework):
-        """Get or create API ID with thread-safe caching (Single Save)."""
-        cache_key = (api_url_path, framework)
+    def _get_or_create_endpoint_id(self, path, framework):
+        """Get or create endpoint ID with thread-safe caching (Single Save)."""
+        cache_key = (path, framework)
 
-        # 1. First check WITHOUT a lock (Lightning fast)
-        if cache_key in self._api_cache:
-            return self._api_cache[cache_key]
+        if cache_key in self._endpoint_cache:
+            return self._endpoint_cache[cache_key]
         
-        # 2. If it's a miss, grab the lock to do the DB work safely
         with self._cache_lock:
-            # Re-check inside the lock in case another thread just created it
-            if cache_key in self._api_cache:
-                return self._api_cache[cache_key]           
-            # Cache miss - hit the database (single save)
+            if cache_key in self._endpoint_cache:
+                return self._endpoint_cache[cache_key]           
             session = self.Session()
             try:
-                stmt = select(APIs).where(
-                    APIs.api_url_path == api_url_path,
-                    APIs.framework == framework
+                stmt = select(Endpoints).where(
+                    Endpoints.path == path,
+                    Endpoints.framework == framework
                 )
-                api_obj = session.scalars(stmt).one_or_none()
+                endpoint_obj = session.scalars(stmt).one_or_none()
                 
-                if not api_obj:
-                    api_obj = APIs(api_url_path=api_url_path, framework=framework)
-                    session.add(api_obj)
+                if not endpoint_obj:
+                    endpoint_obj = Endpoints(path=path, method="GET", framework=framework) # Set method : GET as dummy until implemented emthod capture
+                    session.add(endpoint_obj)
                     session.commit()
-                    session.refresh(api_obj)
+                    session.refresh(endpoint_obj)
 
-                api_id = api_obj.api_id
-                self._api_cache[cache_key] = api_id # Store in cache for future lookups
-                return api_id
+                endpoint_id = endpoint_obj.endpoint_id
+                self._endpoint_cache[cache_key] = endpoint_id # Store in cache for future lookups
+                return endpoint_id
             
             except Exception as e:
                 session.rollback()
-                logger.error("Tracelet API lookup error: %s", e, exc_info=True)
+                logger.error("Tracelet Endpoint lookup error: %s", e, exc_info=True)
                 return None
             finally:
                 session.close()
@@ -97,40 +92,38 @@ class _Engine:
             return
 
         try:
-            # Determine success/fail
             status_code = data["response_status"]
-            status = APIStatus.SUCCESS if 200 <= status_code < 300 else APIStatus.FAILED
+            status = EndpointStatus.SUCCESS if 200 <= status_code < 300 else EndpointStatus.FAILED
             
             try:
                 detail = http.HTTPStatus(status_code).phrase
             except ValueError:
                 detail = "Unknown Status"
 
-            elapsed_secs = float(format_as_seconds(data["elapsed"]))
-            elapsed_ms = elapsed_secs*1000
+            elapsed_ms = data["elapsed"]*1000
+            bucket_le = get_latency_bucket(elapsed_ms)
 
-            api_url_path = clean_url_path(data["api_url"])
+            path = clean_url_path(data["path"])
             framework = data["framework"]
             
-            # Get API ID immediately (single save with cache) - ensures FK is ready
-            api_id = self._get_or_create_api_id(api_url_path, framework)
-            if api_id is None:
-                return  # Skip if API lookup failed
+            endpoint_id = self._get_or_create_endpoint_id(path, framework)
+            if endpoint_id is None:
+                return  # Skip if endpoint lookup failed
             
-            # Prepare metric data (ready for bulk insert)
-            prepared = {
+            metrics_data = {
                 "unique_id": str(uuid.uuid4()),
-                "api_url_id": api_id,
-                "requested_time": data["start_dt"],
-                "responded_time": data["end_dt"],
-                "time_taken_secs": elapsed_secs,
-                "time_taken_ms": elapsed_ms,
+                "endpoint_id": endpoint_id,
+                "request_time": data["start_dt"],
+                "response_time": data["end_dt"],
+                "latency_ms": elapsed_ms,
                 "response_json": {"status_code": status_code, "detail": detail},
                 "response_status": status
             }
+
+            bucket_data = {"le" : bucket_le, "endpoint_id" : endpoint_id}
             
             # Put in queue (lightning fast, non-blocking)
-            self._queue.put(prepared)
+            self._queue.put((metrics_data, bucket_data))
             
             # Trigger flush if batch size reached
             if self._queue.qsize() >= getattr(settings, 'batch_size', 50):
@@ -140,50 +133,65 @@ class _Engine:
     
     def flush_buffer(self):
         """Extract items from queue and send to worker for batch processing.
-        
         Thread-safe implementation that handles race conditions where items
         may be added to the queue while flushing.
         """
-        batch = []
-        # Use get_nowait with exception handling instead of empty() check
-        # This avoids race conditions where queue becomes non-empty between
-        # empty() check and get_nowait() call
+        metric_batch = []
+        bucket_batch = []
+
         while True:
             try:
-                batch.append(self._queue.get_nowait())
+                batch_data = self._queue.get_nowait()
+                metric_batch.append(batch_data[0])
+                bucket_batch.append(batch_data[1])
             except queue.Empty:
                 break
+                
+        logger.debug(f"Initiating data flush. Metrics data: {len(metric_batch)}, Bucket Data: {len(bucket_batch)}")
+        if metric_batch:
+            self.worker.queue_task(self._bulk_save_metrics, metric_batch, bucket_batch)
+
+    def _prepare_bucket(self, bucket_batch):
+        # Aggregate buckets
+        logger.debug("Aggregating Bucket for Bulk Insertion")
+        bucket_counters = defaultdict(int)
+        for bucket in bucket_batch:
+            key = (bucket['endpoint_id'], bucket['le'])
+            bucket_counters[key] += 1
         
-        if batch:
-            if settings.use_bulk_mode:
-                # Bulk save (high performance)
-                self.worker.queue_task(self._bulk_save_metrics, batch)
-            else:
-                # Single save mode (backward compatibility)
-                for item in batch:
-                    self.worker.queue_task(self._single_save_metric, item)
+        bucket_data = [
+            {'endpoint_id': eid, 'le': le, 'count': cnt}
+            for (eid, le), cnt in bucket_counters.items()
+        ]
+        
+        return bucket_data
     
-    def _bulk_save_metrics(self, data_list):
+    def _bulk_save_metrics(self, metrics_data, bucket_batch):
         """Bulk insert metrics using bulk_insert_mappings (high performance)."""
         session = self.Session()
+        import time # To test performance
+        start = time.perf_counter() # To test performance
         try:
-            session.bulk_insert_mappings(Metrics, data_list)
-            session.commit()
+            bucket_data = self._prepare_bucket(bucket_batch)
+            agg_time = (time.perf_counter() - start) * 1000 # To test performance
+            with session.begin():
+                logger.debug("Initiating transaction for bulk Metrics and Buckets insertion")
+                session.bulk_insert_mappings(Metrics, metrics_data)
+                if bucket_data:
+                    insert = pg_insert if settings.db_type == 'postgres' else sqlite_insert
+                    stmt = insert(Buckets).values(bucket_data)
+                    stmt = stmt.on_conflict_do_update(
+                        constraint='_endpoint_bucket_uc',
+                        set_={'count': Buckets.count + stmt.excluded.count}
+                    )
+                    session.execute(stmt)
+                session.commit()
+            total_time = (time.perf_counter() - start) * 1000 # To test performance
+            logger.debug(f"Bulk save: {len(metrics_data)} records, agg={agg_time:.2f}ms, total={total_time:.2f}ms") # To test performance
+            logger.debug("Completed bulk insertion transaction")
         except Exception as e:
             session.rollback()
             logger.error("Tracelet Bulk Save Error: %s", e, exc_info=True)
-        finally:
-            session.close()
-    
-    def _single_save_metric(self, data):
-        """Single save for backward compatibility when bulk_mode is disabled."""
-        session = self.Session()
-        try:
-            session.add(Metrics(**data))
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            logger.error("Tracelet Single Save Error: %s", e, exc_info=True)
         finally:
             session.close()
     
@@ -199,12 +207,10 @@ class _Engine:
                 if hasattr(self, '_timer'): # 1. Stop the heartbeat timer immediately
                     self._timer.cancel()
 
-                # 2. Check if the worker's executor is still accepting tasks
-                # This is the key to stopping that 'RuntimeError'
                 if hasattr(self, 'worker') and self.worker._executor:
                     if not self.worker._executor._shutdown:  # Check if executor is NOT shut down before flushing
                         self.flush_buffer()
-                    
+
                     self.worker.stop() # 3. Gracefully stop the worker
             except Exception as e:
                 logger.error("Error during shutdown: %s", e, exc_info=True)

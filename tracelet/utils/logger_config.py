@@ -3,7 +3,7 @@ import sys
 
 class ColoredFormatter(logging.Formatter):
     # ANSI escape codes for colors
-    GREY = "\x1b[38;20m"
+    GREEN = "\x1b[38;2;0;255;0m"
     BLUE = "\x1b[34;20m"
     YELLOW = "\x1b[33;20m"
     RED = "\x1b[31;20m"
@@ -14,7 +14,7 @@ class ColoredFormatter(logging.Formatter):
     LOG_FORMAT = "%(asctime)s - [%(name)s: %(levelname)s] - %(message)s"
 
     FORMATS = {
-        logging.DEBUG: GREY + LOG_FORMAT + RESET,
+        logging.DEBUG: GREEN + LOG_FORMAT + RESET,
         logging.INFO: BLUE + LOG_FORMAT + RESET,
         logging.WARNING: YELLOW + LOG_FORMAT + RESET,
         logging.ERROR: RED + LOG_FORMAT + RESET,

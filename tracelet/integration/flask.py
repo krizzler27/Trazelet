@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone
 from flask import request, g
 from tracelet.core.engine import _Engine, get_engine
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
 
 
 class FlaskMiddleware:
@@ -33,15 +33,16 @@ class FlaskMiddleware:
                 path = request.path # Fallback for 404s where no route matched
 
             data = {
-                "api_url": path,
+                "path": path,
                 "start_dt": g._tracelet_start_dt,
                 "end_dt": datetime.now(timezone.utc),
                 "elapsed": elapsed,
                 "response_status": response.status_code,
-                "framework": self.framework
+                "framework": self.framework,
             }
 
-            self.engine.capture(data)
+            # Offload capture work to background thread to keep request path lightweight
+            self.engine.worker.queue_task(self.engine.capture, data)
 
         except Exception as e:
             logger.error("Unexpected error in Flask Middleware: %s", e, exc_info=True)

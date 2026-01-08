@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from tracelet.config import settings
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
 
 class AsyncWorker:
     def __init__(self):
@@ -10,6 +10,7 @@ class AsyncWorker:
     def queue_task(self, task_func, *args):
         """Submit a task to the background."""
         try:
+            logger.debug(f"Added {task_func} task to ThreadPool")
             self._executor.submit(task_func, *args)
         except Exception as e:
             logger.error("Unexpected error while submitting task to executor: %s", e, exc_info=True)

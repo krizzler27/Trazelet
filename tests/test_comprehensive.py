@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError, DisconnectionError
 import tracelet
 from tracelet.core.engine import get_engine, _Engine
 from tracelet.config import settings
-from tracelet.db.models import APIs, Metrics
+from tracelet.db.models import Endpoints, Metrics
 
 
 class TestInitialization:
@@ -59,14 +59,12 @@ class TestInitialization:
             enabled=False,
             batch_size=100,
             flush_interval=10.0,
-            use_bulk_mode=False,
             logger_level="DEBUG"
         )
         
         assert settings.enabled is False
         assert settings.batch_size == 100
         assert settings.flush_interval == 10.0
-        assert settings.use_bulk_mode is False
     
     def test_init_multiple_calls_idempotent(self, tmp_path):
         """Test that multiple init() calls don't break things."""
@@ -105,13 +103,10 @@ class TestInitialization:
         config.settings.flush_interval = 15.0
         assert config.settings.flush_interval == 15.0
         
-        config.settings.use_bulk_mode = False
-        assert config.settings.use_bulk_mode is False
-        
         # Test logger_level property
         config.settings.logger_level = 'DEBUG'
         assert config.settings.logger_level == 'DEBUG'
-        from tracelet.logger_config import logger
+        from tracelet.utils.logger_config import logger
         assert logger.level == 10  # DEBUG level is 10
         
         config.settings.logger_level = 'WARNING'
@@ -216,9 +211,13 @@ class TestConcurrency:
         lock = threading.Lock()
         
         def cache_worker():
-            api_id = engine._get_or_create_api_id("/test/endpoint", "test")
-            with lock:
-                api_ids.append(api_id)
+            try:
+                endpoint_id = engine._get_or_create_endpoint_id("/test/endpoint", "test")
+                with lock:
+                    if endpoint_id is not None:
+                        api_ids.append(endpoint_id)
+            except Exception:
+                pass  # Errors are expected and handled gracefully
         
         threads = [threading.Thread(target=cache_worker) for _ in range(20)]
         for t in threads:

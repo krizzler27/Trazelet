@@ -3,7 +3,7 @@ from fastapi import Request
 import time
 from datetime import datetime, timezone
 from tracelet.core.engine import _Engine, get_engine
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
 
 class FastAPIMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, engine: _Engine = None):
@@ -26,15 +26,16 @@ class FastAPIMiddleware(BaseHTTPMiddleware):
             path = route.path if route and hasattr(route, "path") else request.url.path
 
             data = {
-                "api_url": path,
+                "path": path,
                 "start_dt": start_dt,
                 "end_dt": datetime.now(timezone.utc),
                 "elapsed": elapsed,
                 "response_status": response.status_code,
-                "framework": self.framework
+                "framework": self.framework,
             }
 
-            self.engine.capture(data)
+            # Offload capture work to background thread to keep request path lightweight
+            self.engine.worker.queue_task(self.engine.capture, data)
         
         except Exception as e:
             logger.error("Unexpected error in FastAPI Middleware: %s", e, exc_info=True)

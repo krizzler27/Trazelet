@@ -32,7 +32,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
         "db_url": db_url,
         "echo": False,
     }
-    tracelet.init(max_workers=2, enabled=True, db_config=db_config)
+    tracelet.init(max_workers=2, enabled=True, db_config=db_config, logger_level='debug')
 
     app = FastAPI(title="Tracelet Test Suite")
     app.add_middleware(FastAPIMiddleware)
@@ -45,7 +45,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
     @app.get("/slow")
     async def slow_api():
         """Simulates a slow database or external API call (3 seconds)."""
-        await asyncio.sleep(0.01)  # keep unit tests fast
+        await asyncio.sleep(3)  # keep unit tests fast
         return {"status": "completed", "waited": "3s"}
 
     @app.get("/error")

@@ -1,4 +1,6 @@
 import re
+from tracelet import settings
+import bisect
 
 def format_as_seconds(duration: float):
     if duration < 0.000001:  # Less than a microsecond
@@ -38,3 +40,7 @@ def clean_url_path(path):
             path = re.sub(rf'{word}/[^/]+', f'{word}/<masked>', path)
 
     return path
+
+def get_latency_bucket(latency_ms):
+    index = bisect.bisect_left(settings.BUCKET_THRESHOLDS, latency_ms)
+    return settings.BUCKET_THRESHOLDS[index]

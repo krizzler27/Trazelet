@@ -1,8 +1,10 @@
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
 
 class TraceletConfig:
     def __init__(self):
         self.tables_created = False
+        self._logger_level = "INFO"
+        self.BUCKET_THRESHOLDS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, float('inf')]
 
     def configure(self, db_config=None, **kwargs):
 
@@ -11,14 +13,13 @@ class TraceletConfig:
 
         max_workers = kwargs.get('max_workers', 1)
         self.enabled = kwargs.get('enabled', True)
-        self.use_bulk_mode = kwargs.get('use_bulk_mode', True)
         self.batch_size = kwargs.get('batch_size', 50)
         self.flush_interval = kwargs.get('flush_interval', 5.0)
         logger_level = kwargs.get('logger_level', 'INFO')
         
         db = self.configure_db(db_config)
-        self.configure_logger(logger_level)
-        self._logger_level = logger_level
+        self.logger_level = logger_level  # Use property setter
+        self.db_type = db.db_type
         
         if max_workers >= 1 and db.db_type == 'postgres':
             self.max_workers = max_workers
@@ -29,8 +30,7 @@ class TraceletConfig:
             "max_workers" : self.max_workers, 
             "tracelet_enabled": self.enabled,
             "tracelet_logger_level": logger_level,
-            "database": db.db_type,
-            "bulk_mode" : self.use_bulk_mode,
+            "database": self.db_type,
             "batch_size": self.batch_size,
             "flush_interval": self.flush_interval
             
@@ -51,16 +51,24 @@ class TraceletConfig:
         return db
 
     def configure_logger(self, logger_level):
-        if logger_level == 'INFO':
-            return 
-
         level_upper = str(logger_level).upper()
 
-        if level_upper in ['DEBUG', 'WARNING', 'ERROR', 'CRITICAL']:
+        if level_upper in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
             logger.setLevel(level_upper)
             logger.info(f"Logger level updated to {level_upper}")
         else:
             logger.warning(f"'{logger_level}' is not a valid log level. Keeping default [INFO].")
+
+    @property
+    def logger_level(self):
+        """Get the current logger level."""
+        return self._logger_level
+    
+    @logger_level.setter
+    def logger_level(self, value):
+        """Set the logger level and update the actual logger."""
+        self._logger_level = value
+        self.configure_logger(value)
 
 # One instance to be shared across the whole project
 settings = TraceletConfig()

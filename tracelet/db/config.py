@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from tracelet.logger_config import logger
+from tracelet.utils.logger_config import logger
 
 
 class DBSetup:
@@ -36,6 +36,7 @@ class DBSetup:
                 try:
                     cursor.execute("PRAGMA journal_mode=WAL")
                     cursor.execute("PRAGMA synchronous=NORMAL")
+                    cursor.execute("PRAGMA cache_size = -64000")   # 64MB cache
                 except Exception as e:
                     logger.error("Exception occurred while applying SQLite PRAGMA: %s", e)
                 finally:

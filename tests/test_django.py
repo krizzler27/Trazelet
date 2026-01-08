@@ -33,6 +33,7 @@ def setup_django(db_url: str | None = None) -> None:
             ROOT_URLCONF=__name__,
             INSTALLED_APPS=[
                 "django.contrib.contenttypes",
+                "django.contrib.auth",
                 "rest_framework",
             ],
             DATABASES={
@@ -45,6 +46,14 @@ def setup_django(db_url: str | None = None) -> None:
                 "django.middleware.common.CommonMiddleware",
                 "tracelet.integration.django.DjangoMiddleware",
             ],
+            REST_FRAMEWORK={
+                "DEFAULT_RENDERER_CLASSES": [
+                    "rest_framework.renderers.JSONRenderer",
+                ],
+                "DEFAULT_PARSER_CLASSES": [
+                    "rest_framework.parsers.JSONParser",
+                ],
+            },
         )
         django.setup()
 

@@ -14,7 +14,6 @@ def init(db_config=None, **kwargs):
             - enabled (bool): Enable or disable Tracelet tracking. (Default: True)
             - max_workers (int): Number of background threads for processing. (Default: 1)
             - logger_level (str): Logging severity ('DEBUG', 'INFO', 'WARNING', 'ERROR'). (Default: 'INFO')
-            - use_bulk_mode (bool): If True, uses batch inserts for performance. (Default: True)
             - batch_size (int): Number of metrics to accumulate before flushing. (Default: 50)
             - flush_interval (float): Max seconds to wait before flushing metrics. (Default: 5.0)
 

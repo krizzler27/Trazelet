@@ -211,8 +211,8 @@ __marimo__/
 *.db-wal
 *.db-shm
 pyproject.example.toml
-EVALUATION_REPORT.md
-Tracker.md
-AUDIT_REPORT.md
+demo.py
+analytics.py
+tui/
 .vscode
 .cursor

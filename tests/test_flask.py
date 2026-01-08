@@ -16,7 +16,7 @@ def create_app(db_url: str | None = None) -> Flask:
     Used by pytest with a lightweight SQLite DB and as a manual demo server.
     """
     if db_url is None:
-        db_url = "sqlite:///:memory:"
+        db_url = "sqlite:///tracelet.db"
     db_config = {"db_url": db_url, "echo": False}
     tracelet.init(max_workers=2, enabled=True, db_config=db_config)
 
