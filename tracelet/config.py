@@ -1,4 +1,5 @@
 from tracelet.utils.logger_config import logger
+import json
 
 class TraceletConfig:
     def __init__(self):
@@ -30,21 +31,28 @@ class TraceletConfig:
             "max_workers" : self.max_workers, 
             "tracelet_enabled": self.enabled,
             "tracelet_logger_level": logger_level,
+            "db_config": db_config,
             "database": self.db_type,
             "batch_size": self.batch_size,
-            "flush_interval": self.flush_interval
+            "flush_interval": self.flush_interval,
+            "BUCKET_THRESHOLDS": [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, float('inf')],
+            "tracelet_tables_created": self.tables_created
             
         }
         
-        logger.info(f"Settings Applied: {user_settings}")
+        with open("settings.json", "w") as f:
+            json.dump(user_settings, f)
+        
+        logger.info(f"Settings saved in settings.json")
 
     def configure_db(self, db_config):
-        from tracelet.db.config import DBSetup
+        from tracelet.db.config import setup_db
         from tracelet.db.models import create_tables
         
-        db = DBSetup(db_config=db_config if db_config else {})
+        db = setup_db(db_config=db_config if db_config else {})
         self.engine = db.engine
         self.SessionLocal = db.SessionLocal
+        print("engine: ", db)
         logger.info("Database configuration Completed")
         create_tables()
 

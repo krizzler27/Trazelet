@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import ForeignKey, JSON, UniqueConstraint, Index
 from sqlalchemy import Enum as SQLEnum
 from datetime import datetime, timezone
 from enum import Enum
@@ -48,10 +48,15 @@ class Buckets(Base):
     bucket_id: Mapped[int] = mapped_column(primary_key=True)
     endpoint_id: Mapped[int] = mapped_column(ForeignKey("tracelet_endpoints.endpoint_id"), nullable=False)
     le: Mapped[float] = mapped_column(nullable=False)
-    count: Mapped[int]
+    count: Mapped[int] = mapped_column(default=0)
+    captured_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 
     __table_args__ = (
-        UniqueConstraint('endpoint_id', 'le', name='_endpoint_bucket_uc'),
+        UniqueConstraint('endpoint_id', 'le', 'captured_at', name='_endpoint_bucket_snapshot_uc'),
+        Index('idx_endpoint_captured', 'endpoint_id', 'captured_at'),
     )
 
 def create_tables(force_creation=False):

@@ -1,11 +1,12 @@
 from tracelet.db.models import Endpoints, Metrics, Buckets, EndpointStatus
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from tracelet.utils.helper import clean_url_path, get_latency_bucket
 from tracelet.config import settings
 from .worker import AsyncWorker
 from tracelet.utils.logger_config import logger
+from datetime import datetime, timezone
 from collections import defaultdict
 import http
 import queue
@@ -26,6 +27,8 @@ class _Engine:
             db_session_factory = settings.SessionLocal
         self.Session = db_session_factory
         self.worker = AsyncWorker()
+        self._bootstrapped = False
+        self.cumulative_counter = defaultdict(int)
         
         self._queue = queue.Queue()
         
@@ -151,29 +154,56 @@ class _Engine:
         if metric_batch:
             self.worker.queue_task(self._bulk_save_metrics, metric_batch, bucket_batch)
 
+    def _load_last_counts(self, session):
+        """To populate bucket cumulative count in the memory."""
+        # Use the flag we discussed to avoid re-checking an empty DB
+        if getattr(self, '_bootstrapped', False):
+            return
+
+        logger.info("Bootstrapping cumulative counters from DB...")
+        try:
+            latest_timestamp = session.query(func.max(Buckets.captured_at)).scalar()
+
+            if latest_timestamp:
+                last_entries = (
+                    session.query(Buckets.endpoint_id, Buckets.le, Buckets.count)
+                    .filter(Buckets.captured_at == latest_timestamp)
+                    .all()
+                )
+                for eid, le, count in last_entries:
+                    self.cumulative_counter[(eid, le)] = count
+            
+            self._bootstrapped = True # Success flag
+        except Exception as e:
+            logger.error("Error occurred during bucket cumulative count load: %s", e)
+
     def _prepare_bucket(self, bucket_batch):
-        # Aggregate buckets
-        logger.debug("Aggregating Bucket for Bulk Insertion")
-        bucket_counters = defaultdict(int)
-        for bucket in bucket_batch:
-            key = (bucket['endpoint_id'], bucket['le'])
-            bucket_counters[key] += 1
+        """Update the running totals in memory and return the new snapshot."""
+        for item in bucket_batch:
+            eid = item['endpoint_id']
+            assigned_le = item['le']
+            
+            for threshold in settings.BUCKET_THRESHOLDS:
+                if assigned_le <= threshold:
+                    self.cumulative_counter[(eid, threshold)] += 1
         
-        bucket_data = [
-            {'endpoint_id': eid, 'le': le, 'count': cnt}
-            for (eid, le), cnt in bucket_counters.items()
-        ]
+        now = datetime.now(timezone.utc)
         
-        return bucket_data
+        return [
+            {
+                'endpoint_id': eid,
+                'le': le,
+                'count': total_count,
+                'captured_at': now  
+            }
+            for (eid, le), total_count in self.cumulative_counter.items()
+        ]  
     
     def _bulk_save_metrics(self, metrics_data, bucket_batch):
         """Bulk insert metrics using bulk_insert_mappings (high performance)."""
         session = self.Session()
-        import time # To test performance
-        start = time.perf_counter() # To test performance
         try:
             bucket_data = self._prepare_bucket(bucket_batch)
-            agg_time = (time.perf_counter() - start) * 1000 # To test performance
             with session.begin():
                 logger.debug("Initiating transaction for bulk Metrics and Buckets insertion")
                 session.bulk_insert_mappings(Metrics, metrics_data)
@@ -181,13 +211,11 @@ class _Engine:
                     insert = pg_insert if settings.db_type == 'postgres' else sqlite_insert
                     stmt = insert(Buckets).values(bucket_data)
                     stmt = stmt.on_conflict_do_update(
-                        constraint='_endpoint_bucket_uc',
-                        set_={'count': Buckets.count + stmt.excluded.count}
+                        constraint='_endpoint_bucket_snapshot_uc',
+                        set_={'count': stmt.excluded.count}
                     )
                     session.execute(stmt)
                 session.commit()
-            total_time = (time.perf_counter() - start) * 1000 # To test performance
-            logger.debug(f"Bulk save: {len(metrics_data)} records, agg={agg_time:.2f}ms, total={total_time:.2f}ms") # To test performance
             logger.debug("Completed bulk insertion transaction")
         except Exception as e:
             session.rollback()

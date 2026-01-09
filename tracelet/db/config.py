@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from tracelet.utils.logger_config import logger
 
-
+_shared_db_instance = None
 class DBSetup:
     def __init__(self, db_config={}):
         self.database_url = db_config.get('db_url', "sqlite:///tracelet.db")
@@ -44,3 +44,13 @@ class DBSetup:
 
 
         return engine
+    
+def setup_db(db_config):
+    """
+    This is the ONLY way to get the engine. 
+    It ensures we never create more than one.
+    """
+    global _shared_db_instance
+    if _shared_db_instance is None:
+        _shared_db_instance = DBSetup(db_config)
+    return _shared_db_instance

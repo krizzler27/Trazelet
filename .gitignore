@@ -212,7 +212,5 @@ __marimo__/
 *.db-shm
 pyproject.example.toml
 demo.py
-analytics.py
-tui/
-.vscode
-.cursor
+*.ipynb
+dev/
