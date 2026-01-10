@@ -32,6 +32,7 @@ class DjangoMiddleware:
 
             data = {
                 "path": path,
+                "method": request.method,
                 "start_dt": start_dt,
                 "end_dt": datetime.now(timezone.utc),
                 "elapsed": elapsed,

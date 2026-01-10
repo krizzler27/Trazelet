@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple, Dict
 
 from tracelet.utils.analytics import AnalyticsEngine, estimate_percentile, HistogramSnapshot
+from tracelet.utils.caching import lru_cache_decorator
 
 logger = logging.getLogger("tracelet")
 
@@ -79,7 +80,8 @@ class AnalyticsService:
     def generate_operational_report(
         self,
         duration_str: str,
-        endpoint_id: Optional[int] = None
+        endpoint_id: Optional[int] = None,
+        no_cache: bool = False
     ) -> Tuple[List[EndpointHealthMetrics], Optional[TimeWindow]]:
         """
         Primary analytics query. Generate complete health report for endpoints.
@@ -93,13 +95,13 @@ class AnalyticsService:
         """
         try:
             # 1. Parse time window
-            window = self._parse_window(duration_str)
+            window = self._parse_window(duration_str, cache_bypass=no_cache)
             if not window:
                 logger.warning("Failed to parse duration: %s", duration_str)
                 return [], None
             
             # 2. Fetch available endpoints
-            all_endpoints = self.engine.fetch_active_endpoints()
+            all_endpoints = self.engine.fetch_active_endpoints(cache_bypass=no_cache)
             if not all_endpoints:
                 logger.warning("No active endpoints found")
                 return [], window
@@ -115,9 +117,15 @@ class AnalyticsService:
             
             endpoint_ids = [ep['id'] for ep in endpoints]
             
-            # 3. BATCH FETCH: Get all summaries in one network call (avoid N+1)
+            # 3. BATCH FETCH: Get all summaries and apdex scores in one network call (avoid N+1)
             all_summaries = self.engine.fetch_batch_summary_stats(
-                endpoint_ids, window.start, window.end
+                tuple(endpoint_ids), window.start, window.end, cache_bypass=no_cache
+            )
+            all_apdex_scores = self.engine.fetch_batch_apdex_scores(
+                tuple(endpoint_ids), window.start, window.end, cache_bypass=no_cache
+            )
+            all_window_metrics = self.engine.fetch_batch_window_metrics(
+                tuple(endpoint_ids), window.start, window.end, cache_bypass=no_cache
             )
 
             # 4. Build report for each endpoint
@@ -125,28 +133,28 @@ class AnalyticsService:
             
             for ep in endpoints:
                 eid = ep['id']
-                buckets = []
                 
                 # Get summary stats (already fetched in batch)
                 summary = all_summaries.get(eid, {"mean": 0, "max": 0, "total": 0, "errors": 0})
+                apdex = all_apdex_scores.get(eid, 0.0)
                 
-                # Get window metrics (buckets + summary)
-                window_metrics = self.engine.get_window_metrics(eid, window.start, window.end)
-                buckets = window_metrics.get('buckets', [])
+                # Get window metrics (already fetched in batch)
+                buckets = all_window_metrics.get(eid, [])
                 
                 if not buckets:
                     logger.debug("No bucket data for endpoint %d in window", eid)
                     continue
                 
                 # Calculate percentiles
-                p50 = estimate_percentile(buckets, 50.0)
-                p95 = estimate_percentile(buckets, 95.0)
-                p99 = estimate_percentile(buckets, 99.0)
+                # Convert buckets to a tuple for hashability with lru_cache
+                p50 = estimate_percentile(tuple(buckets), 50.0, cache_bypass=no_cache)
+                p95 = estimate_percentile(tuple(buckets), 95.0, cache_bypass=no_cache)
+                p99 = estimate_percentile(tuple(buckets), 99.0, cache_bypass=no_cache)
                 
                 # Calculate operational metrics
                 error_rate = self._calculate_error_percent(summary.get('total', 0), summary.get('errors', 0))
                 throughput = self._calculate_throughput(summary.get('total', 0), window.total_seconds())
-                apdex = self.engine.get_apdex_score(eid, window.start, window.end)
+                # Apdex is already fetched in batch
                 
                 # Assign health grade
                 health_grade = self._assign_health_grade(p99, error_rate, apdex)
@@ -177,7 +185,8 @@ class AnalyticsService:
             logger.error("Error generating operational report: %s", e, exc_info=True)
             return [], None
 
-    def _parse_window(self, duration_str: str) -> Optional[TimeWindow]:
+    @lru_cache_decorator(maxsize=128)
+    def _parse_window(self, duration_str: str, cache_bypass: bool = False) -> Optional[TimeWindow]:
         """
         Parse duration string and return TimeWindow.
         
@@ -236,7 +245,7 @@ class AnalyticsService:
                     raise ValueError(f"Unknown unit: {unit}. Use: days, weeks, months, years")
             
             # Adjust if window exceeds available data
-            earliest, latest = self.engine.fetch_data_time_range()
+            earliest, latest = self.engine.fetch_data_time_range(cache_bypass=cache_bypass)
             earliest = earliest.replace(tzinfo=timezone.utc)
             latest = latest.replace(tzinfo=timezone.utc)
             print(start_time, end_time, earliest, latest)

@@ -54,13 +54,13 @@ class _Engine:
         self.flush_buffer()
         self._schedule_flush()
     
-    def _get_or_create_endpoint_id(self, path, framework):
+    def _get_or_create_endpoint_id(self, path, framework, method):
         """Get or create endpoint ID with thread-safe caching (Single Save)."""
         cache_key = (path, framework)
 
         if cache_key in self._endpoint_cache:
             return self._endpoint_cache[cache_key]
-        
+
         with self._cache_lock:
             if cache_key in self._endpoint_cache:
                 return self._endpoint_cache[cache_key]           
@@ -73,7 +73,7 @@ class _Engine:
                 endpoint_obj = session.scalars(stmt).one_or_none()
                 
                 if not endpoint_obj:
-                    endpoint_obj = Endpoints(path=path, method="GET", framework=framework) # Set method : GET as dummy until implemented emthod capture
+                    endpoint_obj = Endpoints(path=path, method=method, framework=framework)
                     session.add(endpoint_obj)
                     session.commit()
                     session.refresh(endpoint_obj)
@@ -108,8 +108,9 @@ class _Engine:
 
             path = clean_url_path(data["path"])
             framework = data["framework"]
+            method = data["method"]
             
-            endpoint_id = self._get_or_create_endpoint_id(path, framework)
+            endpoint_id = self._get_or_create_endpoint_id(path, framework, method=method)
             if endpoint_id is None:
                 return  # Skip if endpoint lookup failed
             

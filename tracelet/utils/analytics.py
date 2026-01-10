@@ -14,12 +14,14 @@ from typing import List, Optional, Tuple, Dict
 from sqlalchemy import select, func, and_
 from tracelet.db.models import Buckets, Endpoints, Metrics, EndpointStatus
 
+from tracelet.utils.caching import ttl_cache_decorator, lru_cache_decorator
+
 logger = logging.getLogger("tracelet")
 
 BUCKET_THRESHOLDS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
 
 
-@dataclass
+@dataclass(frozen=True)
 class HistogramSnapshot:
     """Clean container for bucket data to separate DB from Logic."""
     threshold_ms: float
@@ -47,7 +49,8 @@ class AnalyticsEngine:
     def __init__(self, session):
         self.session = session
 
-    def fetch_data_time_range(self) -> Tuple[Optional[datetime], Optional[datetime]]:
+    @ttl_cache_decorator(ttl=300)
+    def fetch_data_time_range(self, cache_bypass: bool = False) -> Tuple[Optional[datetime], Optional[datetime]]:
         """Finds the boundary timestamps for available telemetry data."""
         try:
             stmt = select(
@@ -62,7 +65,8 @@ class AnalyticsEngine:
             logger.error("Error fetching data range: %s", e, exc_info=True)
             return None, None
 
-    def fetch_active_endpoints(self) -> List[Dict]:
+    @ttl_cache_decorator(ttl=300)
+    def fetch_active_endpoints(self, cache_bypass: bool = False) -> List[Dict]:
         """Retrieves all endpoints that have recorded performance data."""
         try:
             stmt = (
@@ -97,117 +101,14 @@ class AnalyticsEngine:
             )
         ).scalar_subquery()
 
-    def get_window_metrics(self, endpoint_id: int, start_at: datetime, end_at: datetime) -> Dict:
-        """
-        Calculates deltas between two snapshots to determine 
-        performance within a specific time window.
-        
-        Returns:
-            {
-                "endpoint_id": int,
-                "buckets": [HistogramSnapshot, ...],
-                # "summary": {mean, max, total, errors}
-            }
-        """
-        try:
-            # 1. Identify the two snapshots to compare
-            start_ts = self._get_snapshot_subquery(endpoint_id, start_at)
-            end_ts = self._get_snapshot_subquery(endpoint_id, end_at)
 
-            # 2. Fetch bucket counts at start snapshot
-            start_buckets = self.session.execute(
-                select(Buckets.le, Buckets.count)
-                .where(and_(
-                    Buckets.endpoint_id == endpoint_id,
-                    Buckets.captured_at == start_ts
-                ))
-            ).all()
-            
-            # 3. Fetch bucket counts at end snapshot
-            end_buckets = self.session.execute(
-                select(Buckets.le, Buckets.count)
-                .where(and_(
-                    Buckets.endpoint_id == endpoint_id,
-                    Buckets.captured_at == end_ts
-                ))
-            ).all()
-
-            # Convert to dictionaries for delta calculation
-            start_map = {b.le: (b.count or 0) for b in start_buckets}
-            end_map = {b.le: (b.count or 0) for b in end_buckets}
-            
-            # 4. Calculate deltas and prepare HistogramSnapshot objects
-            final_buckets = []
-            all_les = set(start_map.keys()) | set(end_map.keys())
-            
-            for le in sorted(all_les):
-                start_count = start_map.get(le, 0) or 0
-                end_count = end_map.get(le, 0)
-                delta = end_count if end_count < start_count else end_count - start_count
-                
-                if delta > 0:
-                    final_buckets.append(HistogramSnapshot(threshold_ms=le, cumulative_count=delta))
-                elif delta < 0:
-                    logger.warning(
-                        f"Negative delta for endpoint {endpoint_id}, bucket {le}: "
-                        f"start={start_count}, end={end_count}. Skipping."
-                    )
-
-            # 5. Fetch summary stats (mean, max, error count)
-            # summary = self._fetch_summary_stats(endpoint_id, start_at, end_at)
-            
-            # If no positive deltas, return empty
-            if not final_buckets:
-                logger.warning(f"No positive deltas for endpoint {endpoint_id} in window [{start_at}, {end_at}]")
-                return {
-                    "endpoint_id": endpoint_id,
-                    "buckets": [],
-                    # "summary": {"mean": 0, "max": 0, "total": 0, "errors": 0}
-                }
-
-            
-            return {
-                "endpoint_id": endpoint_id,
-                "buckets": final_buckets,
-                # "summary": summary
-            }
-
-        except Exception as e:
-            logger.error("Error getting window metrics: %s", e, exc_info=True)
-            return {
-                "endpoint_id": endpoint_id,
-                "buckets": [],
-                # "summary": {"mean": 0, "max": 0, "total": 0, "errors": 0}
-            }
-
-    def _fetch_summary_stats(self, endpoint_id: int, start: datetime, end: datetime) -> Dict:
-        """Fetch average, max, and error counts in one clean SQLAlchemy call."""
-        try:
-            stmt = (
-                select(
-                    func.avg(Metrics.latency_ms).label("mean"),
-                    func.max(Metrics.latency_ms).label("max"),
-                    func.count(Metrics.metrics_id).label("total"),
-                    func.count().filter(Metrics.response_status == EndpointStatus.FAILED).label("errors")
-                )
-                .where(
-                    and_(
-                        Metrics.endpoint_id == endpoint_id,
-                        Metrics.created_at.between(start, end)
-                    )
-                )
-            )
-            result = self.session.execute(stmt).mappings().first()
-            return dict(result) if result else {"mean": 0, "max": 0, "total": 0, "errors": 0}
-        except Exception as e:
-            logger.error("Error fetching summary stats: %s", e, exc_info=True)
-            return {"mean": 0, "max": 0, "total": 0, "errors": 0}
-    
+    @ttl_cache_decorator(ttl=300)
     def fetch_batch_summary_stats(
-        self, 
-        endpoint_ids: List[int], 
-        start: datetime, 
-        end: datetime
+        self,
+        endpoint_ids: List[int],
+        start: datetime,
+        end: datetime,
+        cache_bypass: bool = False
     ) -> Dict[int, dict]:
         """
         BATCH QUERY: Fetches stats for all provided endpoints in one trip.
@@ -241,7 +142,8 @@ class AnalyticsEngine:
             return {}
 
     def get_error_rate(self, endpoint_id: int, start: datetime, end: datetime) -> float:
-        """Calculate error rate (%) for time window."""
+        """Calculate error rate (%) for time window. Not used for actualy analyitcs.
+        Can be used for individual calculations if needed."""
         try:
             stmt = (
                 select(
@@ -266,7 +168,8 @@ class AnalyticsEngine:
             return 0.0
 
     def get_throughput_rps(self, endpoint_id: int, start: datetime, end: datetime) -> float:
-        """Calculate requests per second for time window."""
+        """Calculate requests per second for time window. Not used for actualy analyitcs.
+        Can be used for individual calculations if needed."""
         try:
             stmt = (
                 select(func.count(Metrics.metrics_id).label("total"))
@@ -291,22 +194,24 @@ class AnalyticsEngine:
             logger.error("Error calculating throughput: %s", e, exc_info=True)
             return 0.0
 
-    def get_apdex_score(
+
+    @ttl_cache_decorator(ttl=300)
+    def fetch_batch_apdex_scores(
         self,
-        endpoint_id: int,
+        endpoint_ids: List[int],
         start: datetime,
         end: datetime,
-        target_latency_ms: float = 100.0
-    ) -> float:
+        target_latency_ms: float = 100.0,
+        cache_bypass: bool = False
+    ) -> Dict[int, float]:
         """
-        Calculate Apdex score (0-1).
-        Satisfactory: latency <= target_latency_ms
-        Tolerable: target_latency_ms < latency <= 4*target_latency_ms
-        Apdex = (satisfactory + tolerable/2) / total
+        BATCH QUERY: Fetches Apdex scores for all provided endpoints in one trip.
+        Returns a mapping of {endpoint_id: apdex_score}.
         """
         try:
             stmt = (
                 select(
+                    Metrics.endpoint_id,
                     func.count().filter(Metrics.latency_ms <= target_latency_ms).label("satisfactory"),
                     func.count().filter(
                         and_(
@@ -318,24 +223,118 @@ class AnalyticsEngine:
                 )
                 .where(
                     and_(
-                        Metrics.endpoint_id == endpoint_id,
+                        Metrics.endpoint_id.in_(endpoint_ids),
                         Metrics.created_at.between(start, end)
                     )
                 )
+                .group_by(Metrics.endpoint_id)
             )
-            result = self.session.execute(stmt).mappings().first()
-            
-            if not result or result['total'] == 0:
-                return 0.0
-            
-            apdex = (result['satisfactory'] + result['tolerable'] / 2) / result['total']
-            return round(min(apdex, 1.0), 2)
+
+            results = self.session.execute(stmt).mappings().all()
+            apdex_scores = {}
+            for row in results:
+                total = row['total']
+                if total == 0:
+                    apdex_scores[row['endpoint_id']] = 0.0
+                    continue
+                apdex = (row['satisfactory'] + row['tolerable'] / 2) / total
+                apdex_scores[row['endpoint_id']] = round(min(apdex, 1.0), 2)
+            return apdex_scores
         except Exception as e:
-            logger.error("Error calculating Apdex: %s", e, exc_info=True)
-            return 0.0
+            logger.error("Error fetching batch Apdex scores: %s", e, exc_info=True)
+            return {endpoint_id: 0.0 for endpoint_id in endpoint_ids}
+
+    @ttl_cache_decorator(ttl=300)
+    def fetch_batch_window_metrics(self, endpoint_ids: List[int], start_at: datetime, end_at: datetime, cache_bypass: bool = False) -> Dict[int, List[HistogramSnapshot]]:
+        """
+        BATCH QUERY: Calculates deltas between two snapshots for multiple endpoints.
+        Returns a mapping of {endpoint_id: [HistogramSnapshot, ...]}.
+        """
+        try:
+            # 1. Identify the two snapshots to compare for all endpoints
+            start_ts_subquery = (
+                select(Buckets.endpoint_id, func.max(Buckets.captured_at).label("max_captured_at"))
+                .where(
+                    and_(
+                        Buckets.endpoint_id.in_(endpoint_ids),
+                        Buckets.captured_at <= start_at
+                    )
+                )
+                .group_by(Buckets.endpoint_id)
+            ).cte("start_ts_subquery")
+
+            end_ts_subquery = (
+                select(Buckets.endpoint_id, func.max(Buckets.captured_at).label("max_captured_at"))
+                .where(
+                    and_(
+                        Buckets.endpoint_id.in_(endpoint_ids),
+                        Buckets.captured_at <= end_at
+                    )
+                )
+                .group_by(Buckets.endpoint_id)
+            ).cte("end_ts_subquery")
+
+            # 2. Fetch all bucket counts at start snapshots for all relevant endpoints
+            start_buckets_stmt = (
+                select(Buckets.endpoint_id, Buckets.le, Buckets.count)
+                .join(start_ts_subquery,
+                      and_(Buckets.endpoint_id == start_ts_subquery.c.endpoint_id,
+                           Buckets.captured_at == start_ts_subquery.c.max_captured_at))
+                .where(Buckets.endpoint_id.in_(endpoint_ids))
+            )
+            start_bucket_results = self.session.execute(start_buckets_stmt).all()
+            
+            # 3. Fetch all bucket counts at end snapshots for all relevant endpoints
+            end_buckets_stmt = (
+                select(Buckets.endpoint_id, Buckets.le, Buckets.count)
+                .join(end_ts_subquery,
+                      and_(Buckets.endpoint_id == end_ts_subquery.c.endpoint_id,
+                           Buckets.captured_at == end_ts_subquery.c.max_captured_at))
+                .where(Buckets.endpoint_id.in_(endpoint_ids))
+            )
+            end_bucket_results = self.session.execute(end_buckets_stmt).all()
+
+            # Convert to dictionaries for delta calculation
+            start_maps: Dict[int, Dict[float, int]] = {eid: {} for eid in endpoint_ids}
+            end_maps: Dict[int, Dict[float, int]] = {eid: {} for eid in endpoint_ids}
+
+            for eid, le, count in start_bucket_results:
+                start_maps[eid][le] = count or 0
+            for eid, le, count in end_bucket_results:
+                end_maps[eid][le] = count or 0
+
+            final_batch_buckets: Dict[int, List[HistogramSnapshot]] = {eid: [] for eid in endpoint_ids}
+
+            for eid in endpoint_ids:
+                start_map = start_maps[eid]
+                end_map = end_maps[eid]
+                all_les = set(start_map.keys()) | set(end_map.keys())
+
+                for le in sorted(all_les):
+                    start_count = start_map.get(le, 0) or 0
+                    end_count = end_map.get(le, 0) or 0
+
+                    if end_count < start_count:
+                        logger.warning(
+                            f"Cumulative count decreased for endpoint {eid}, bucket {le}: "
+                            f"start_count={start_count}, end_count={end_count}. Setting delta to 0."
+                        )
+                        delta = 0
+                    else:
+                        delta = end_count - start_count
+                    
+                    if delta > 0:
+                        final_batch_buckets[eid].append(HistogramSnapshot(threshold_ms=le, cumulative_count=delta))
+            
+            return final_batch_buckets
+
+        except Exception as e:
+            logger.error("Error fetching batch window metrics: %s", e, exc_info=True)
+            return {eid: [] for eid in endpoint_ids}
 
 
-def estimate_percentile(snapshots: List[HistogramSnapshot], percentile: float) -> float:
+@lru_cache_decorator(maxsize=128)
+def estimate_percentile(snapshots: Tuple[HistogramSnapshot, ...], percentile: float, cache_bypass: bool = False) -> float:
     """
     Pure math function: Linear interpolation for percentile calculation.
     Separated from the DB logic for easier testing and reusability.

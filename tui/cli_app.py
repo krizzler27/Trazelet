@@ -6,8 +6,9 @@ Modern, interactive analytics interface with real-time feedback.
 
 import json
 import logging
-from typing import Optional
-from datetime import datetime
+from typing import Optional, Callable, TypeVar
+import functools
+from dataclasses import dataclass
 
 import typer  # type: ignore
 from rich.console import Console # type: ignore
@@ -18,7 +19,7 @@ from rich.live import Live # type: ignore
 from rich.spinner import Spinner # type: ignore
 from rich import box # type: ignore
 
-from tracelet.db.config import setup_db
+from tracelet.db.config import setup_db, DBSetup
 from tracelet.utils.services import AnalyticsServiceContext
 
 logger = logging.getLogger("tracelet")
@@ -30,22 +31,37 @@ app = typer.Typer(
     rich_markup_mode="rich"
 )
 
-# Global state for CLI
-_settings: Optional[dict] = None
-_db_session = None
+@dataclass
+class CliContext:
+    settings: dict
+    db_setup: DBSetup
+    db_session: object # SQLAlchemy session
+
+# Type variable for decorator
+F = TypeVar("F", bound=Callable)
+
+def cli_error_handler(f: F) -> F:
+    """Decorator to handle common CLI exceptions."""
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except typer.Exit:
+            raise  # Re-raise TyperExit to allow clean exits
+        except Exception as e:
+            logger.error("Error in CLI command %s: %s", f.__name__, e, exc_info=True)
+            console.print(f"[red]✗ Error: {e}[/red]")
+            raise typer.Exit(code=1)
+    return wrapper
 
 
 def load_settings() -> dict:
     """Load Tracelet settings from config file."""
-    global _settings
-    if _settings is not None:
-        return _settings
-    
     try:
         with open("settings.json", "r") as f:
-            _settings = json.load(f)
+            settings = json.load(f)
         logger.debug("Settings loaded from settings.json")
-        return _settings
+        return settings
     except FileNotFoundError:
         console.print("[red]✗ Error: settings.json not found[/red]")
         console.print("[yellow]Run [bold]tracelet init[/bold] first to configure[/yellow]")
@@ -53,25 +69,6 @@ def load_settings() -> dict:
     except json.JSONDecodeError:
         console.print("[red]✗ Error: settings.json is invalid JSON[/red]")
         raise typer.Exit(code=1)
-
-
-def get_db_session():
-    """Get or create database session."""
-    global _db_session
-    if _db_session is None:
-        settings_data = load_settings()
-        db = setup_db(settings_data.get("db_config", {}))
-        _db_session = db.SessionLocal()
-    return _db_session
-
-
-def cleanup():
-    """Clean up resources on exit."""
-    global _db_session
-    if _db_session:
-        _db_session.close()
-        _db_session = None
-
 
 # ============================================================================
 # Formatting & Styling Utilities
@@ -199,27 +196,44 @@ def _render_detailed_table(metrics: list, window) -> None:
 
 
 def _render_compact_view(metrics: list, window) -> None:
-    """Render compact, minimal view."""
+    logger.debug("Rendering compact view with %d metrics for window %s", len(metrics), window.label)
+    """Render compact, minimal view using Rich Table."""
     console.print(f"\n[bold blue]🎯 {window.label}[/bold blue]")
     console.print(
         f"[dim]{window.start.strftime('%Y-%m-%d %H:%M')} → "
         f"{window.end.strftime('%Y-%m-%d %H:%M')}[/dim]\n"
     )
 
+    table = Table(
+        show_header=True,
+        header_style="bold cyan",
+        border_style="dim cyan",
+        box=box.MINIMAL,
+        padding=(0, 1)
+    )
+
+    table.add_column("Endpoint", style="cyan", no_wrap=True)
+    table.add_column("P99", justify="right", width=10)
+    table.add_column("Err", justify="right", width=9)
+    table.add_column("Grade", justify="center", width=8)
+
     for m in metrics:
         grade_emoji = _get_grade_emoji(m.health_grade)
         grade_style = _get_grade_style(m.health_grade)
-        method_badge = _format_method_badge(m.method)
+        method_badge = Text.from_markup(_format_method_badge(m.method))
         
-        console.print(
-            f"{grade_emoji} {method_badge} {m.path:40} "
-            f"│ P99: {_format_latency(m.p99_ms):15} "
-            f"│ Err: {_format_percentage(m.error_rate_percent):12} "
-            f"│ [{grade_style}]{m.health_grade}[/{grade_style}]"
+        table.add_row(
+            Text.assemble(grade_emoji," ", method_badge, " ", m.path),
+            _format_latency(m.p99_ms),
+            _format_percentage(m.error_rate_percent),
+            Text(m.health_grade, style=grade_style)
         )
+    
+    console.print(table)
 
 
 def _render_json_output(metrics: list, window) -> None:
+    logger.debug("Rendering JSON output with %d metrics for window %s", len(metrics), window.label)
     """Render metrics as JSON for integration."""
     data = {
         "window": {
@@ -266,12 +280,20 @@ def _render_json_output(metrics: list, window) -> None:
 # ============================================================================
 
 @app.command()
+@cli_error_handler
 def status(
+    ctx: typer.Context,
     duration: str = typer.Option(
         "last_24h",
         "--duration",
         "-d",
         help="⏱️  Time window: 'last_24h', 'last_7d', '3 months', '1 year', etc."
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        "-nc",
+        help="🗄️ Bypass cache for this report."
     )
 ):
     """
@@ -285,79 +307,76 @@ def status(
       tracelet status -d last_24h
       tracelet status -d "7 days"
     """
-    session = get_db_session()
-    try:
-        with Live(
-            Panel(
-                Spinner("dots", text=f"[cyan]Analyzing {duration}...[/cyan]"),
-                border_style="cyan"
+    session = ctx.obj.db_session
+    with Live(
+        Panel(
+            Spinner("dots", text=f"[cyan]Analyzing {duration}...[/cyan]"),
+            border_style="cyan"
+        ),
+        console=console,
+        refresh_per_second=1
+    ) as live:
+        with AnalyticsServiceContext(session) as service:
+            report, window = service.generate_operational_report(duration, no_cache=no_cache)
+
+    if not report or not window:
+        console.print("[yellow]⚠️  No metrics data available[/yellow]")
+        return
+
+    # Calculate grade distribution
+    grades = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
+    for m in report:
+        grades[m.health_grade] = grades.get(m.health_grade, 0) + 1
+    
+    critical = grades['D']
+    healthy = grades['A'] + grades['B']
+    
+    # Overall status
+    if critical > 0:
+        status_color = "red"
+        status_emoji = "🚨"
+    elif grades['C'] > 0:
+        status_color = "yellow"
+        status_emoji = "⚠️"
+    else:
+        status_color = "green"
+        status_emoji = "✅"
+    
+    # Header panel
+    console.print(
+        Panel(
+            Text(
+                f"All Systems Operational\n"
+                f"{healthy}/{len(report)} endpoints healthy",
+                justify="center"
             ),
-            console=console,
-            refresh_per_second=1
-        ) as live:
-            with AnalyticsServiceContext(session) as service:
-                report, window = service.generate_operational_report(duration)
-
-        if not report or not window:
-            console.print("[yellow]⚠️  No metrics data available[/yellow]")
-            return
-
-        # Calculate grade distribution
-        grades = {'A': 0, 'B': 0, 'C': 0, 'D': 0}
-        for m in report:
-            grades[m.health_grade] = grades.get(m.health_grade, 0) + 1
-        
-        critical = grades['D']
-        healthy = grades['A'] + grades['B']
-        
-        # Overall status
-        if critical > 0:
-            status_color = "red"
-            status_emoji = "🚨"
-        elif grades['C'] > 0:
-            status_color = "yellow"
-            status_emoji = "⚠️"
-        else:
-            status_color = "green"
-            status_emoji = "✅"
-        
-        # Header panel
-        console.print(
-            Panel(
-                Text(
-                    f"All Systems Operational\n"
-                    f"{healthy}/{len(report)} endpoints healthy",
-                    justify="center"
-                ),
-                title=f"{status_emoji} Health Report: {window.label}",
-                border_style=status_color,
-                expand=False
-            )
+            title=f"{status_emoji} Health Report: {window.label}",
+            border_style=status_color,
+            expand=False
         )
-        
-        # Detailed table
-        _render_detailed_table(report, window)
-        
-        # Grade distribution bar
-        console.print(f"\n[bold]Grade Distribution:[/bold]")
-        for grade in ['A', 'B', 'C', 'D']:
-            count = grades[grade]
-            pct = (count / len(report) * 100) if report else 0
-            bar = "█" * count + "░" * (len(report) - count)
-            style = _get_grade_style(grade)
-            emoji = _get_grade_emoji(grade)
-            console.print(
-                f"  {emoji} [{style}]{grade}[/{style}] {bar:50} {count} ({pct:.0f}%)"
-            )
+    )
+    
+    # Detailed table
+    _render_detailed_table(report, window)
+    
+    # Grade distribution bar
+    console.print(f"\n[bold]Grade Distribution:[/bold]")
+    for grade in ['A', 'B', 'C', 'D']:
+        count = grades[grade]
+        pct = (count / len(report) * 100) if report else 0
+        bar = "█" * count + "░" * (len(report) - count)
+        style = _get_grade_style(grade)
+        emoji = _get_grade_emoji(grade)
+        console.print(
+            f"  {emoji} [{style}]{grade}[/{style}] {bar:50} {count} ({pct:.0f}%)"
+        )
 
-    except Exception as e:
-        logger.error("Error in status command: %s", e, exc_info=True)
-        console.print(f"[red]✗ Error: {e}[/red]")
-        raise typer.Exit(code=1)
 
 
 @app.command()
+@cli_error_handler
 def describe(
+    ctx: typer.Context,
     duration: str = typer.Option(
         "last_7d",
         "--duration",
@@ -381,6 +400,12 @@ def describe(
         "--sort",
         "-s",
         help="🔢 Sort by: 'p99', 'error', 'rps', 'apdex'"
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        "-nc",
+        help="🗄️ Bypass cache for this report."
     )
 ):
     """
@@ -395,51 +420,48 @@ def describe(
       tracelet describe -d "3 months" -e 1
       tracelet describe --sort error -f compact
     """
-    session = get_db_session()
-    try:
-        with Live(
-            Panel(
-                Spinner("dots", text=f"[cyan]Fetching metrics for {duration}...[/cyan]"),
-                border_style="cyan"
-            ),
-            console=console,
-            refresh_per_second=1
-        ) as live:
-            with AnalyticsServiceContext(session) as service:
-                metrics, window = service.generate_operational_report(duration_str=duration, endpoint_id=endpoint_id)
+    session = ctx.obj.db_session
+    
+    with Live(
+        Panel(
+            Spinner("dots", text=f"[cyan]Fetching metrics for {duration}...[/cyan]"),
+            border_style="cyan"
+        ),
+        console=console,
+        refresh_per_second=1
+    ) as live:
+        with AnalyticsServiceContext(session) as service:
+            metrics, window = service.generate_operational_report(duration_str=duration, endpoint_id=endpoint_id, no_cache=no_cache)
 
-        if not metrics or not window:
-            console.print("[yellow]⚠️  No metrics data available[/yellow]")
-            return
+    if not metrics or not window:
+        console.print("[yellow]⚠️  No metrics data available[/yellow]")
+        return
 
-        # Sorting logic
-        sort_map = {
-            'p99': lambda m: m.p99_ms,
-            'error': lambda m: m.error_rate_percent,
-            'rps': lambda m: m.throughput_rps,
-            'apdex': lambda m: m.apdex_score
-        }
-        reverse = sort_by != 'apdex'
-        metrics.sort(key=sort_map.get(sort_by, lambda m: m.p99_ms), reverse=reverse)
+    # Sorting logic
+    sort_map = {
+        'p99': lambda m: m.p99_ms,
+        'error': lambda m: m.error_rate_percent,
+        'rps': lambda m: m.throughput_rps,
+        'apdex': lambda m: m.apdex_score
+    }
+    reverse = sort_by != 'apdex'
+    metrics.sort(key=sort_map.get(sort_by, lambda m: m.p99_ms), reverse=reverse)
 
-        # Render based on format
-        if format == 'table':
-            _render_detailed_table(metrics, window)
-        elif format == 'compact':
-            _render_compact_view(metrics, window)
-        elif format == 'json':
-            _render_json_output(metrics, window)
-        else:
-            console.print(f"[red]✗ Unknown format: {format}[/red]")
-
-    except Exception as e:
-        logger.error("Error in describe command: %s", e, exc_info=True)
-        console.print(f"[red]✗ Error: {e}[/red]")
-        raise typer.Exit(code=1)
+    # Render based on format
+    if format == 'table':
+        _render_detailed_table(metrics, window)
+    elif format == 'compact':
+        _render_compact_view(metrics, window)
+    elif format == 'json':
+        _render_json_output(metrics, window)
+    else:
+        console.print(f"[red]✗ Unknown format: {format}[/red]")
 
 
 @app.command()
+@cli_error_handler
 def top(
+    ctx: typer.Context,
     duration: str = typer.Option(
         "last_7d",
         "--duration",
@@ -457,6 +479,12 @@ def top(
         "--limit",
         "-n",
         help="📊 Number of endpoints to show"
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        "-nc",
+        help="🗄️ Bypass cache for this report."
     )
 ):
     """
@@ -470,63 +498,60 @@ def top(
       tracelet top -m error -d last_24h
       tracelet top -m slowest
     """
-    session = get_db_session()
-    try:
-        with Live(
-            Panel(
-                Spinner("dots", text=f"[cyan]Finding anomalies in {duration}...[/cyan]"),
-                border_style="cyan"
-            ),
-            console=console,
-            refresh_per_second=1
-        ) as live:
-            with AnalyticsServiceContext(session) as service:
-                metrics, window = service.generate_operational_report(duration)
+    session = ctx.obj.db_session
+    
+    with Live(
+        Panel(
+            Spinner("dots", text=f"[cyan]Finding anomalies in {duration}...[/cyan]"),
+            border_style="cyan"
+        ),
+        console=console,
+        refresh_per_second=1
+    ) as live:
+        with AnalyticsServiceContext(session) as service:
+            metrics, window = service.generate_operational_report(duration, no_cache=no_cache)
 
-        if not metrics or not window:
-            console.print("[yellow]⚠️  No metrics data available[/yellow]")
-            return
+    if not metrics or not window:
+        console.print("[yellow]⚠️  No metrics data available[/yellow]")
+        return
 
-        # Sort by metric
-        if metric == 'p99':
-            metrics.sort(key=lambda m: m.p99_ms, reverse=True)
-            title = "🐢 Slowest Endpoints (P99)"
-        elif metric == 'error':
-            metrics.sort(key=lambda m: m.error_rate_percent, reverse=True)
-            title = "⚠️  Highest Error Rate"
-        elif metric == 'slowest':
-            metrics.sort(key=lambda m: m.p99_ms, reverse=True)
-            title = "🐢 Slowest Endpoints"
-        else:
-            console.print(f"[red]✗ Unknown metric: {metric}[/red]")
-            return
+    # Sort by metric
+    if metric == 'p99':
+        metrics.sort(key=lambda m: m.p99_ms, reverse=True)
+        title = "🐢 Slowest Endpoints (P99)"
+    elif metric == 'error':
+        metrics.sort(key=lambda m: m.error_rate_percent, reverse=True)
+        title = "⚠️  Highest Error Rate"
+    elif metric == 'slowest':
+        metrics.sort(key=lambda m: m.p99_ms, reverse=True)
+        title = "🐢 Slowest Endpoints"
+    else:
+        console.print(f"[red]✗ Unknown metric: {metric}[/red]")
+        return
 
-        metrics = metrics[:limit]
+    metrics = metrics[:limit]
+    
+    console.print(f"\n[bold blue]{title} — {window.label}[/bold blue]\n")
+
+    for i, m in enumerate(metrics, 1):
+        grade_emoji = _get_grade_emoji(m.health_grade)
+        grade_style = _get_grade_style(m.health_grade)
+        method_badge = _format_method_badge(m.method)
         
-        console.print(f"\n[bold blue]{title} — {window.label}[/bold blue]\n")
-
-        for i, m in enumerate(metrics, 1):
-            grade_emoji = _get_grade_emoji(m.health_grade)
-            grade_style = _get_grade_style(m.health_grade)
-            method_badge = _format_method_badge(m.method)
-            
-            console.print(f"[bold]{i}.[/bold] {method_badge} {m.path}")
-            console.print(
-                f"    P99: {_format_latency(m.p99_ms):15} │ "
-                f"Error: {_format_percentage(m.error_rate_percent):12} │ "
-                f"Apdex: {_format_score(m.apdex_score):8} │ "
-                f"Grade: [{grade_style}]{m.health_grade}[/{grade_style}] {grade_emoji}"
-            )
-            console.print()
-
-    except Exception as e:
-        logger.error("Error in top command: %s", e, exc_info=True)
-        console.print(f"[red]✗ Error: {e}[/red]")
-        raise typer.Exit(code=1)
+        console.print(f"[bold]{i}.[/bold] {method_badge} {m.path}")
+        console.print(
+            f"    P99: {_format_latency(m.p99_ms):15} │ "
+            f"Error: {_format_percentage(m.error_rate_percent):12} │ "
+            f"Apdex: {_format_score(m.apdex_score):8} │ "
+            f"Grade: [{grade_style}]{m.health_grade}[/{grade_style}] {grade_emoji}"
+        )
+        console.print()
 
 
 @app.command()
+@cli_error_handler
 def list_endpoints(
+    ctx: typer.Context,
     framework: Optional[str] = typer.Option(
         None,
         "--framework",
@@ -538,6 +563,12 @@ def list_endpoints(
         "--method",
         "-m",
         help="🔗 Filter by HTTP method: GET, POST, PUT, DELETE"
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        "-nc",
+        help="🗄️ Bypass cache for this report."
     )
 ):
     """
@@ -549,66 +580,70 @@ def list_endpoints(
       tracelet list --framework fastapi
       tracelet list --method GET
     """
-    session = get_db_session()
-    try:
-        with AnalyticsServiceContext(session) as service:
-            endpoints = service.engine.fetch_active_endpoints()
+    session = ctx.obj.db_session
+    
+    with AnalyticsServiceContext(session) as service:
+        endpoints = service.engine.fetch_active_endpoints(cache_bypass=no_cache)
 
-        if not endpoints:
-            console.print("[yellow]ℹ️  No endpoints found[/yellow]")
-            return
+    if not endpoints:
+        console.print("[yellow]ℹ️  No endpoints found[/yellow]")
+        return
 
-        # Filter
-        if framework:
-            endpoints = [ep for ep in endpoints if ep['framework'].lower() == framework.lower()]
-        if method:
-            endpoints = [ep for ep in endpoints if ep['method'].upper() == method.upper()]
+    # Filter
+    if framework:
+        endpoints = [ep for ep in endpoints if ep['framework'].lower() == framework.lower()]
+    if method:
+        endpoints = [ep for ep in endpoints if ep['method'].upper() == method.upper()]
 
-        if not endpoints:
-            console.print("[yellow]ℹ️  No endpoints matching filters[/yellow]")
-            return
+    if not endpoints:
+        console.print("[yellow]ℹ️  No endpoints matching filters[/yellow]")
+        return
 
-        # Create table
-        table = Table(
-            title="📋 Monitored Endpoints",
-            show_header=True,
-            header_style="bold magenta",
-            border_style="cyan",
-            box=box.ROUNDED
+    # Create table
+    table = Table(
+        title="📋 Monitored Endpoints",
+        show_header=True,
+        header_style="bold magenta",
+        border_style="cyan",
+        box=box.ROUNDED
+    )
+    table.add_column("ID", justify="right", style="cyan", width=6)
+    table.add_column("Method", style="green", width=10)
+    table.add_column("Path", style="magenta")
+    table.add_column("Framework", style="yellow", width=12)
+
+    for ep in endpoints:
+        table.add_row(
+            str(ep['id']),
+            _format_method_badge(ep['method']),
+            ep['path'],
+            ep['framework']
         )
-        table.add_column("ID", justify="right", style="cyan", width=6)
-        table.add_column("Method", style="green", width=10)
-        table.add_column("Path", style="magenta")
-        table.add_column("Framework", style="yellow", width=12)
 
-        for ep in endpoints:
-            table.add_row(
-                str(ep['id']),
-                _format_method_badge(ep['method']),
-                ep['path'],
-                ep['framework']
-            )
-
-        console.print(table)
-        console.print(f"\n[dim]├─ Total: {len(endpoints)} endpoint{'s' if len(endpoints) != 1 else ''}[/dim]")
-
-    except Exception as e:
-        logger.error("Error in list command: %s", e, exc_info=True)
-        console.print(f"[red]✗ Error: {e}[/red]")
-        raise typer.Exit(code=1)
-
+    console.print(table)
+    console.print(f"\n[dim]├─ Total: {len(endpoints)} endpoint{'s' if len(endpoints) != 1 else ''}[/dim]")
 
 @app.callback()
 def main(ctx: typer.Context):
     """Tracelet CLI — Modern API Performance Analytics."""
-    # Load settings on app startup
     try:
-        load_settings()
+        settings_data = load_settings()
+        db_setup = setup_db(settings_data.get("db_config", {}))
+        db_session = db_setup.SessionLocal()
+        ctx.obj = CliContext(settings=settings_data, db_setup=db_setup, db_session=db_session)
     except typer.Exit:
         raise
-
+    except Exception as e:
+        logger.error("Error during CLI startup: %s", e, exc_info=True)
+        console.print(f"[red]✗ Error during startup: {e}[/red]")
+        raise typer.Exit(code=1)
+    
     # Register cleanup on exit
-    ctx.call_on_close(cleanup)
+    def _cleanup_session():
+        if ctx.obj and ctx.obj.db_session:
+            ctx.obj.db_session.close()
+            logger.debug("Database session closed on CLI exit")
+    ctx.call_on_close(_cleanup_session)
 
 
 if __name__ == "__main__":

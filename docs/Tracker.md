@@ -420,7 +420,7 @@
 - **Description:** REST API endpoint to query metrics programmatically
 - **Dependencies:** None
 
-##### 5. Performance Grading System ⭐⭐⭐
+##### 5. Performance Grading System ⭐⭐⭐ ✅
 
 - **Status:** Planned
 - **Effort:** 1-2 days
@@ -434,7 +434,7 @@
 
 #### Medium-Impact Features:
 
-##### 6. CLI Tool ⭐⭐⭐
+##### 6. CLI Tool ⭐⭐⭐ ✅
 
 - **Status:** Planned
 - **Effort:** 4-5 days
@@ -804,6 +804,7 @@ No critical bugs found.
 **Status:** ✅ **READY FOR BETA RELEASE**
 
 **Recent Major Updates:**
+
 - ✅ Histogram buckets for latency percentile calculations
 - ✅ Model updates (Endpoints with method field, Buckets model)
 - ✅ Fully async capture architecture
