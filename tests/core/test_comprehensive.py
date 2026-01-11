@@ -212,7 +212,7 @@ class TestConcurrency:
         
         def cache_worker():
             try:
-                endpoint_id = engine._get_or_create_endpoint_id("/test/endpoint", "test")
+                endpoint_id = engine._get_or_create_endpoint_id("/test/endpoint", "test", "GET")
                 with lock:
                     if endpoint_id is not None:
                         api_ids.append(endpoint_id)
@@ -310,7 +310,7 @@ class TestFailureSimulation:
         db_config = {"db_url": f"sqlite:///{db_path}"}
         tracelet.init(db_config=db_config, enabled=True)
         
-        from tracelet.integration.flask import FlaskMiddleware
+        from tracelet.integrations.flask import FlaskMiddleware
         
         app = Mock()
         middleware = FlaskMiddleware(app=app)

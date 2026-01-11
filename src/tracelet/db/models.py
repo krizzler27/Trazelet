@@ -16,7 +16,7 @@ class Endpoints(Base):
     __tablename__ = 'tracelet_endpoints'
 
     endpoint_id: Mapped[int] = mapped_column(primary_key=True)
-    path: Mapped[str] = mapped_column(index=True, nullable=False)
+    path: Mapped[str] = mapped_column(nullable=False)
     method: Mapped[str] = mapped_column(nullable=False)
     framework: Mapped[str] = mapped_column(nullable=False)
     deprecated: Mapped[bool] = mapped_column(default=False)
@@ -25,6 +25,7 @@ class Endpoints(Base):
 
     __table_args__ = (
         UniqueConstraint('path', 'method', 'framework', name='_path_method_framework_uc'),
+        Index('idx_path_method_fw', 'path', 'method', 'framework'),
     )
 
 
@@ -42,6 +43,10 @@ class Metrics(Base):
     response_status: Mapped[EndpointStatus] = mapped_column(SQLEnum(EndpointStatus), default=EndpointStatus.SUCCESS)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        Index('idx_metrics_endpoint_created_at', 'endpoint_id', 'created_at'),
+    )
+
 class Buckets(Base):
     __tablename__ = 'tracelet_latency_buckets'
 
@@ -56,7 +61,9 @@ class Buckets(Base):
 
     __table_args__ = (
         UniqueConstraint('endpoint_id', 'le', 'captured_at', name='_endpoint_bucket_snapshot_uc'),
-        Index('idx_endpoint_captured', 'endpoint_id', 'captured_at'),
+        Index('idx_le_captured', 'le', 'captured_at'),
+        Index('idx_buckets_endpoint_captured_at', 'endpoint_id', 'captured_at'),
+        Index('idx_buckets_captured_at', 'captured_at'),
     )
 
 def create_tables(force_creation=False):

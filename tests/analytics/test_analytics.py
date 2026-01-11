@@ -8,13 +8,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from tracelet.utils.analytics import AnalyticsEngine, estimate_percentile
-from tracelet.utils.services import AnalyticsService
+from tracelet.tui.analytics import AnalyticsEngine, estimate_percentile
+from tracelet.tui.services import AnalyticsService
 from rich.console import Console #type: ignore
 from rich.table import Table #type: ignore
 from tracelet.db.config import setup_db
 
-db = setup_db({"db_url": "postgresql+psycopg2://kriz:root@localhost:5432/tracelet", "echo": False})
+db = setup_db({"db_url": "postgresql+psycopg2://USER:PASSWORD@localhost:5432/tracelet", "echo": False})
 SessionLocal = db.SessionLocal
 
 logging.basicConfig(level=logging.INFO)
@@ -99,7 +99,7 @@ def test_percentile_estimation():
     """Test percentile estimation algorithm."""
     console.print("\n[bold cyan]Testing Percentile Estimation[/bold cyan]")
     
-    from tracelet.utils.analytics import HistogramSnapshot
+    from tracelet.tui.analytics import HistogramSnapshot
     
     try:
         # Create mock bucket data

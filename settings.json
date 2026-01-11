@@ -1,1 +1,0 @@
-{"max_workers": 2, "tracelet_enabled": true, "tracelet_logger_level": "debug", "db_config": {"db_url": "postgresql+psycopg2://kriz:root@localhost:5432/tracelet", "echo": false}, "database": "postgres", "batch_size": 50, "flush_interval": 5.0, "BUCKET_THRESHOLDS": [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, Infinity], "tracelet_tables_created": true}

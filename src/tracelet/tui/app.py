@@ -20,10 +20,11 @@ from rich.spinner import Spinner # type: ignore
 from rich import box # type: ignore
 
 from tracelet.db.config import setup_db, DBSetup
-from tracelet.utils.services import AnalyticsServiceContext
+from tracelet.tui.services import AnalyticsServiceContext
 
 logger = logging.getLogger("tracelet")
 console = Console()
+logger.setLevel("DEBUG")
 
 app = typer.Typer(
     help="📊 Tracelet Analytics — Modern API Performance Insights",
@@ -421,7 +422,7 @@ def describe(
       tracelet describe --sort error -f compact
     """
     session = ctx.obj.db_session
-    
+
     with Live(
         Panel(
             Spinner("dots", text=f"[cyan]Fetching metrics for {duration}...[/cyan]"),

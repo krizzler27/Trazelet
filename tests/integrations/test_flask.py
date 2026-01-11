@@ -4,7 +4,7 @@ import pytest  # type: ignore
 from flask import Flask, abort, jsonify, request
 
 import tracelet
-from tracelet.integration.flask import FlaskMiddleware
+from tracelet.integrations.flask import FlaskMiddleware
 
 
 # --- Application factory ----------------------------------------------------

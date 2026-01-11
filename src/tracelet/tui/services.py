@@ -8,12 +8,14 @@ Separates business logic from database queries.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Any, Literal
+from sqlalchemy.orm import session
 
-from tracelet.utils.analytics import AnalyticsEngine, estimate_percentile, HistogramSnapshot
-from tracelet.utils.caching import lru_cache_decorator
+from tracelet.tui.analytics import AnalyticsEngine, estimate_percentile
+from tracelet.tui.caching import lru_cache_decorator
 
 logger = logging.getLogger("tracelet")
+# logger.setLevel('DEBUG')
 
 
 @dataclass
@@ -72,7 +74,7 @@ class AnalyticsService:
     Handles time window parsing, batch queries, and health metric computation.
     """
 
-    def __init__(self, session):
+    def __init__(self, session: Any):
         """Initialize with database session."""
         self.session = session
         self.engine = AnalyticsEngine(session)
@@ -246,6 +248,11 @@ class AnalyticsService:
             
             # Adjust if window exceeds available data
             earliest, latest = self.engine.fetch_data_time_range(cache_bypass=cache_bypass)
+            
+            if earliest is None or latest is None: # Handle case where no data is available
+                logger.warning("No historical data available to determine time range. Cannot adjust window.")
+                return TimeWindow(start=start_time, end=end_time, label=label) # Return window without adjustment
+
             earliest = earliest.replace(tzinfo=timezone.utc)
             latest = latest.replace(tzinfo=timezone.utc)
             print(start_time, end_time, earliest, latest)
@@ -294,7 +301,7 @@ class AnalyticsService:
             return 0.0
         return round(total_requests / time_seconds, 2)
 
-    def close(self):
+    def close(self) -> None:
         """Clean up database connections."""
         if self.session:
             self.session.close()
@@ -314,15 +321,15 @@ class AnalyticsServiceContext:
             report, window = service.generate_operational_report("last_7d")
     """
     
-    def __init__(self, session):
+    def __init__(self, session: session):
         self.session = session
         self.service = None
     
-    def __enter__(self):
+    def __enter__(self) -> AnalyticsService:
         self.service = AnalyticsService(self.session)
         return self.service
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
         if self.service:
             self.service.close()
         return False

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 import tracelet
-from tracelet.integration.fastapi import FastAPIMiddleware
+from tracelet.integrations.fastapi import FastAPIMiddleware
 
 
 # --- Application factory ----------------------------------------------------
@@ -141,8 +141,8 @@ if __name__ == "__main__":
     # Quick manual test server, using PostgreSQL by default.
     import uvicorn
 
-    USER = "kriz"
-    PASSWORD = "root"
+    USER = "USER"
+    PASSWORD = "PASSWORD"
     postgres_db_url = f"postgresql+psycopg2://{USER}:{PASSWORD}@localhost:5432/tracelet"
 
     demo_app = create_app(db_url=postgres_db_url)

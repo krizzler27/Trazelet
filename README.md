@@ -1,25 +1,22 @@
+<center>
+
 # Tracelet
 
-<div align="center">
+**A Lightweight, Zero-Configuration, Plug-on Middleware for Python Web Analytics**
 
-**A Lightweight, Cross-Framework APM for Python**
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Quality](https://img.shields.io/badge/code%20quality-9.0%2F10-brightgreen.svg)](Audit_report.md)
-[![Test Coverage](https://img.shields.io/badge/coverage-70%25-yellow.svg)](Testing_report.md)
-
-*Zero-configuration performance insights for FastAPI, Django, and Flask*
+*Seamlessly integrates with FastAPI, Django, and Flask to deliver instant API performance insights*
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
-</div>
+</center>
 
 ---
 
 ## 🎯 What is Tracelet?
 
-**Tracelet** is a high-performance, open-source Python library designed to give backend developers **instant visibility** into their API's performance without the complexity of heavy enterprise tools.
+**Tracelet** is a high-performance, open-source Python **Plug-and-play middleware library** designed to provide backend developers with **instant analytics** for their API's performance. It offers instant visibility without the complexity and overhead of traditional enterprise APM tools, seamlessly fitting into any Python web framework with zero configuration.
 
 ### The Problem It Solves
 
@@ -53,55 +50,24 @@ Most developers don't know their API is slow until a user complains. Enterprise 
 - ✅ **Django**: Standard middleware pattern
 - ✅ **Flask**: Proper request tracking with `g` object
 
-### Performance Metrics
+### Analytics & TUI Capabilities
 
-- **Capture Latency**: ~0.12ms average (non-blocking)
-- **Concurrent Operations**: Thread-safe, zero errors in 100+ concurrent captures
-- **Database Writes**: Background processing, no impact on request path
-- **Memory Footprint**: Minimal, efficient queue-based buffering
+- 📊 **Real-time Performance Reports**: Instant health overviews and detailed metric breakdowns via CLI.
+- 📈 **Endpoint Health Grading**: Automated A/B/C/D grading for API endpoints based on performance.
+- 🐢 **Anomaly Detection**: Quickly pinpoint slowest or most error-prone endpoints.
+- 🎨 **Rich Command-Line Interface**: Interactive terminal output with tables, panels, and color-coding, powered by `Rich`.
+- 📋 **Flexible Output Formats**: View analytics in human-readable tables, compact views, or machine-parseable JSON.
+
+### Core Performance Metrics
+
+- **Capture Latency**: ~0.12ms average (non-blocking) ensures minimal impact.
+- **Concurrent Operations**: Thread-safe design, verified with 100+ concurrent captures.
+- **Background Database Writes**: Asynchronous processing with zero impact on the request path.
+- **Minimal Memory Footprint**: Efficient queue-based buffering for low resource consumption.
 
 ---
 
 ## 🚀 Quick Start
-
-### Repo Structure
-
-```
-reports
-├── Audit_report.md
-├── Testing_report.md
-├── Tracker.md
-tests
-├── __init__.py
-├── test_comprehensive.py
-├── test_django.py
-├── test_fastapi.py
-├── test_flask.py
-tracelet
-├── __init__.py
-├── config.py
-├── core
-│   ├── __init__.py
-│   ├── engine.py
-│   ├── worker.py
-├── db
-│   ├── __init__.py
-│   ├── config.py
-│   ├── models.py
-├── integration
-│   ├── __init__.py
-│   ├── django.py
-│   ├── fastapi.py
-│   ├── flask.py
-├── logger_config.py
-├── utils
-│   ├── helper.py
-tui
-├── cli_app.py
-.gitignore
-pyproject.toml
-README.md
-```
 
 ### Installation
 
@@ -121,7 +87,7 @@ pip install tracelet[django]   # For Django
 
 ```python
 from fastapi import FastAPI
-from tracelet.integration.fastapi import FastAPIMiddleware
+from tracelet.integrations.fastapi import FastAPIMiddleware
 import tracelet
 
 # Initialize Tracelet (uses SQLite by default)
@@ -141,7 +107,7 @@ def read_root():
 # settings.py
 MIDDLEWARE = [
     # ... other middleware ...
-    "tracelet.integration.django.DjangoMiddleware",
+    "tracelet.integrations.django.DjangoMiddleware",
 ]
 
 # Initialize Tracelet
@@ -153,7 +119,7 @@ tracelet.init()
 
 ```python
 from flask import Flask
-from tracelet.integration.flask import FlaskMiddleware
+from tracelet.integrations.flask import FlaskMiddleware
 import tracelet
 
 tracelet.init()
@@ -230,6 +196,55 @@ Request → Middleware → Queue → Background Worker → Database
 
 ---
 
+## 📊 Real-time Analytics & TUI
+
+Tracelet isn't just about capturing data; it's about making that data actionable. The **Tracelet Text User Interface (TUI)**, powered by [`src/tracelet/tui/app.py`](src/tracelet/tui/app.py), provides a rich, interactive command-line experience to instantly visualize and analyze your API's performance.
+
+Leveraging the robust **Analytics Engine** described in the [Architecture Report](docs/architecture_report.md), the TUI transforms raw metrics into comprehensive, human-readable reports right in your terminal.
+
+### Key TUI Features:
+
+- ⚡ **Instant Performance Insights**: Get real-time health overviews and detailed metric breakdowns.
+- 🎨 **Rich, Interactive Output**: Uses `Rich` library for color-coded tables, panels, and progress spinners.
+- 🎯 **Endpoint-Level Granularity**: Analyze individual endpoint performance (latency, errors, throughput, Apdex).
+- 🔍 **Anomaly Detection**: Quickly identify slowest or most error-prone endpoints.
+- 📋 **Flexible Reporting**: View metrics in detailed tables, compact summaries, or JSON for programmatic use.
+
+### Available Commands:
+
+The Tracelet CLI (exposed via the `tracelet` command) offers the following powerful commands:
+
+- Get an operational health overview of all monitored endpoints, including health grades and distribution.
+
+  - [`tracelet status`](src/tracelet/tui/app.py:285):
+
+    ```bash
+    tracelet status -d last_24h
+    ```
+- Dive into detailed analytics for all or specific endpoints, showing percentiles (P50, P95, P99), error rates, throughput, and Apdex scores.
+
+  - [`tracelet describe`](src/tracelet/tui/app.py:377):
+
+  ```bash
+  tracelet describe -d "7 days" --sort p99 -f json
+  ```
+- Highlight performance anomalies by listing the top N slowest or most error-prone endpoints.
+
+  - [`tracelet top`](src/tracelet/tui/app.py:463):
+
+  ```bash
+  tracelet top -m error -n 5
+  ```
+- View a comprehensive list of all active endpoints being monitored, with filtering options by framework or HTTP method.
+
+  - [`tracelet list`](src/tracelet/tui/app.py:554):
+
+  ```bash
+  tracelet list --framework fastapi
+  ```
+
+---
+
 ## 📖 Documentation
 
 ### Configuration Options
@@ -243,6 +258,8 @@ Request → Middleware → Queue → Background Worker → Database
 | `max_workers`    | int   | `1`      | Background worker threads (1 for SQLite, configurable for Postgres) |
 | `use_bulk_mode`  | bool  | `True`   | Enable bulk insert mode for performance                             |
 | `logger_level`   | str   | `"INFO"` | Logging level: DEBUG, INFO, WARNING, ERROR                          |
+
+---
 
 ### Database Configuration
 
@@ -289,139 +306,9 @@ engine.flush_buffer()  # Manually flush queued metrics
 
 ---
 
-## 🧪 Testing
-
-Tracelet includes a comprehensive test suite with ~70% coverage:
-
-```bash
-# Install test dependencies
-pip install pytest pytest-cov
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=tracelet --cov-report=html
-```
-
-See [Testing_report.md](Testing_report.md) for detailed test documentation.
-
----
-
-## 🛠️ Development
-
-### Project Structure
-
-```
-tracelet/
-├── __init__.py          # Public API
-├── config.py            # Configuration management
-├── core/
-│   ├── engine.py        # Core engine (singleton)
-│   └── worker.py        # Background worker (ThreadPoolExecutor)
-├── db/
-│   ├── config.py        # Database configuration
-│   └── models.py        # SQLAlchemy models
-├── integration/
-│   ├── django.py        # Django middleware
-│   ├── fastapi.py       # FastAPI middleware
-│   └── flask.py         # Flask middleware
-└── utils/
-    └── helper.py        # Utility functions
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_comprehensive.py
-
-# Run with verbose output
-pytest -v
-```
-
-### Code Quality
-
-- **Test Coverage**: ~70% (Target: 80%+)
-- **Type Hints**: ~40% (Target: 90%+)
-- **Code Quality Score**: 9.0/10 (See [Audit_report.md](Audit_report.md))
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### How to Contribute
-
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Make your changes** (follow PEP8, add tests)
-4. **Run tests** (`pytest`)
-5. **Commit your changes** (`git commit -m 'Add amazing feature'`)
-6. **Push to the branch** (`git push origin feature/amazing-feature`)
-7. **Open a Pull Request**
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/tracelet.git
-cd tracelet
-
-# Install in development mode
-pip install -e ".[fastapi,flask,django]"
-
-# Install test dependencies
-pip install pytest pytest-cov
-
-# Run tests
-pytest
-```
-
-### Code Style
-
-- Follow PEP8 guidelines
-- Use type hints where possible
-- Add docstrings to public methods
-- Write tests for new features
-
----
-
-## 📋 Roadmap
-
-### v0.9.0 - Beta Release (Current)
-
-- ✅ Core features complete
-- ✅ Comprehensive test suite
-- ✅ Framework integrations
-- 🔴 LICENSE file (TODO)
-- 🟡 Increase test coverage to 80%+
-
-### v1.0.0 - Public Release
-
-- 🟡 Export to CSV/JSON
-- 🟡 Basic Dashboard
-- 🟡 Slack/Email Alerts
-- 🟡 API Endpoint for Metrics
-
-### v1.1.0 - Growth Features
-
-- 🟢 CLI Tool
-- 🟢 Performance Grading System
-- 🟢 Custom Tags/Labels
-- 🟢 Data Masking
-
-See [Tracker.md](Tracker.md) for detailed roadmap and feature tracking.
-
----
-
 ## 📝 License
 
-*License information will be added soon. (MIT License recommended)*
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -435,23 +322,21 @@ See [Tracker.md](Tracker.md) for detailed roadmap and feature tracking.
 
 ## 📚 Additional Resources
 
-- [Audit Report](Audit_report.md) - Comprehensive technical audit
-- [Testing Report](Testing_report.md) - Test suite documentation
-- [Tracker](Tracker.md) - Development roadmap and feature tracking
+- [Architecture report](docs/architecture_report.md) - Comprehensive technical audit
+- [Testing report](docs/Testing_report.md) - Test suite documentation
+- [Tracker](docs/Tracker.md) - Development roadmap and feature tracking
 
 ---
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/tracelet/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/tracelet/discussions)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/Tracelet/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/Tracelet/discussions)
 
 ---
 
-<div align="center">
+<center>
 
-**Made with ❤️ by the Tracelet Team**
+[⭐ Star us on GitHub](https://github.com/yourusername/Tracelet) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](https://github.com/yourusername/Tracelet/issues)
 
-[⭐ Star us on GitHub](https://github.com/yourusername/tracelet) • [📖 Documentation](#-documentation) • [🐛 Report Bug](https://github.com/yourusername/tracelet/issues)
-
-</div>
+</center>

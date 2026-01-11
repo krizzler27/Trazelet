@@ -44,7 +44,7 @@ def setup_django(db_url: str | None = None) -> None:
             },
             MIDDLEWARE=[
                 "django.middleware.common.CommonMiddleware",
-                "tracelet.integration.django.DjangoMiddleware",
+                "tracelet.integrations.django.DjangoMiddleware",
             ],
             REST_FRAMEWORK={
                 "DEFAULT_RENDERER_CLASSES": [

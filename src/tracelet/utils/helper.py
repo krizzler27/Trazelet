@@ -2,7 +2,8 @@ import re
 from tracelet import settings
 import bisect
 
-def format_as_seconds(duration: float):
+def format_as_seconds(duration: float) -> str:
+    """Formats a duration in seconds into a human-readable string with appropriate precision."""
     if duration < 0.000001:  # Less than a microsecond
         return f"{duration:.9f}"
     elif duration < 0.001:   # Less than a millisecond
@@ -10,7 +11,8 @@ def format_as_seconds(duration: float):
     else:
         return f"{duration:.3f}"
 
-def clean_url_path(path):
+def clean_url_path(path: str) -> str:
+    """Normalizes and sanitizes a URL path for consistent tracing and aggregation."""
     if not path:
         return "/"
     
@@ -26,7 +28,7 @@ def clean_url_path(path):
     # Replace UUIDs with <uuid>
     path = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<uuid>', path)
     
-    # 3. Replace Numeric IDs with <id> 
+    # 3. Replace Numeric IDs with <id>
     # (Matches digits between slashes or at the end of a string)
     path = re.sub(r'/\d+(?=/|$)', '/<id>', path)
     
@@ -41,6 +43,7 @@ def clean_url_path(path):
 
     return path
 
-def get_latency_bucket(latency_ms):
+def get_latency_bucket(latency_ms: float) -> float:
+    """Determines the appropriate latency bucket for a given latency value."""
     index = bisect.bisect_left(settings.BUCKET_THRESHOLDS, latency_ms)
     return settings.BUCKET_THRESHOLDS[index]

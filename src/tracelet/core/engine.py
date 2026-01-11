@@ -56,7 +56,7 @@ class _Engine:
     
     def _get_or_create_endpoint_id(self, path, framework, method):
         """Get or create endpoint ID with thread-safe caching (Single Save)."""
-        cache_key = (path, framework)
+        cache_key = (path, method, framework)
 
         if cache_key in self._endpoint_cache:
             return self._endpoint_cache[cache_key]
@@ -68,6 +68,7 @@ class _Engine:
             try:
                 stmt = select(Endpoints).where(
                     Endpoints.path == path,
+                    Endpoints.method == method,
                     Endpoints.framework == framework
                 )
                 endpoint_obj = session.scalars(stmt).one_or_none()
@@ -156,8 +157,12 @@ class _Engine:
             self.worker.queue_task(self._bulk_save_metrics, metric_batch, bucket_batch)
 
     def _load_last_counts(self, session):
-        """To populate bucket cumulative count in the memory."""
-        # Use the flag we discussed to avoid re-checking an empty DB
+        """Populate bucket cumulative counts from DB and ensure all thresholds are initialized.
+        
+        After loading existing bucket data, initializes all thresholds to 0 for endpoints
+        that exist but have incomplete bucket data. This ensures complete snapshots.
+        """
+        # Use the flag to avoid re-checking an empty DB
         if getattr(self, '_bootstrapped', False):
             return
 
@@ -166,6 +171,7 @@ class _Engine:
             latest_timestamp = session.query(func.max(Buckets.captured_at)).scalar()
 
             if latest_timestamp:
+                # Load existing bucket counts from latest snapshot
                 last_entries = (
                     session.query(Buckets.endpoint_id, Buckets.le, Buckets.count)
                     .filter(Buckets.captured_at == latest_timestamp)
@@ -173,32 +179,73 @@ class _Engine:
                 )
                 for eid, le, count in last_entries:
                     self.cumulative_counter[(eid, le)] = count
+                
+                # Get all endpoint_ids that have bucket data
+                endpoint_ids_with_buckets = {eid for eid, _, _ in last_entries}
+                
+                # Ensure ALL thresholds exist for each endpoint (initialize missing to 0)
+                for eid in endpoint_ids_with_buckets:
+                    for threshold in settings.BUCKET_THRESHOLDS:
+                        if (eid, threshold) not in self.cumulative_counter:
+                            self.cumulative_counter[(eid, threshold)] = 0
+                            logger.debug(
+                                f"Initialized missing threshold {threshold}ms for endpoint {eid} to 0"
+                            )
+            else:
+                # No existing data - check if endpoints exist and initialize all thresholds
+                existing_endpoints = session.query(Endpoints.endpoint_id).all()
+                for (eid,) in existing_endpoints:
+                    for threshold in settings.BUCKET_THRESHOLDS:
+                        if (eid, threshold) not in self.cumulative_counter:
+                            self.cumulative_counter[(eid, threshold)] = 0
             
             self._bootstrapped = True # Success flag
+            logger.info("Bucket cumulative counters bootstrapped successfully")
         except Exception as e:
-            logger.error("Error occurred during bucket cumulative count load: %s", e)
+            logger.error("Error occurred during bucket cumulative count load: %s", e, exc_info=True)
 
     def _prepare_bucket(self, bucket_batch):
-        """Update the running totals in memory and return the new snapshot."""
+        """Update the running totals in memory and return the new snapshot.
+        
+        Ensures ALL bucket thresholds are included in every snapshot for complete histogram representation.
+        Missing thresholds are initialized to 0 (or existing cumulative count if already present).
+        """
+        # 1. Update cumulative counters for requests in this batch
+        endpoint_ids_in_batch = set()
         for item in bucket_batch:
             eid = item['endpoint_id']
             assigned_le = item['le']
+            endpoint_ids_in_batch.add(eid)
             
             for threshold in settings.BUCKET_THRESHOLDS:
                 if assigned_le <= threshold:
                     self.cumulative_counter[(eid, threshold)] += 1
         
+        # 2. Ensure ALL thresholds exist for each endpoint in this batch
+        # This guarantees complete snapshots even if some thresholds never received requests
+        for eid in endpoint_ids_in_batch:
+            for threshold in settings.BUCKET_THRESHOLDS:
+                # Initialize to 0 if not present (ensures all thresholds in snapshot)
+                if (eid, threshold) not in self.cumulative_counter:
+                    self.cumulative_counter[(eid, threshold)] = 0
+        
         now = datetime.now(timezone.utc)
         
-        return [
-            {
-                'endpoint_id': eid,
-                'le': le,
-                'count': total_count,
-                'captured_at': now  
-            }
-            for (eid, le), total_count in self.cumulative_counter.items()
-        ]  
+        # 3. Return snapshot with ALL thresholds for endpoints in this batch
+        # Note: This returns all thresholds for endpoints in batch, not all endpoints ever seen
+        # This is correct because we only need complete snapshots for endpoints with new data
+        snapshot_data = []
+        for eid in endpoint_ids_in_batch:
+            for threshold in settings.BUCKET_THRESHOLDS:
+                count = self.cumulative_counter.get((eid, threshold), 0)
+                snapshot_data.append({
+                    'endpoint_id': eid,
+                    'le': threshold,
+                    'count': count,
+                    'captured_at': now
+                })
+        
+        return snapshot_data  
     
     def _bulk_save_metrics(self, metrics_data, bucket_batch):
         """Bulk insert metrics using bulk_insert_mappings (high performance)."""
