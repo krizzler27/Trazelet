@@ -14,7 +14,6 @@ from typing import Dict, List, Tuple
 
 import numpy as np  # type: ignore
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from tracelet.db.models import Endpoints, Metrics, Buckets
 from tracelet.config import settings
@@ -700,7 +699,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.warning("\n⚠️  Interrupted by user")
 
-    except Exception as e:
+    except Exception:
         logger.error("\n❌ Fatal error", exc_info=True)
 
     elapsed = time.time() - start

@@ -334,13 +334,12 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 ## 💬 Support
 
 - **Issues**: [GitHub Issues](./issues)
-- **Discussions**: [GitHub Discussions](./discussions)
+- **Discussions**: [GitHub Discussions](../../discussions)
 
 ---
 
 <div align="center">
 
-[⭐ Star us on GitHub](.) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](./issues)
-
+[⭐ Star us on GitHub](.) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](../../issues)
 
 </div>

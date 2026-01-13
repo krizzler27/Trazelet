@@ -12,8 +12,7 @@ class TraceletConfig:
         logger.info("Initializing Tracelet...")
         logger.info("Setting Up user settings")
 
-        # fmt: off
-        BUCKET_THRESHOLDS = [
+        self.BUCKET_THRESHOLDS = [
             25, 50, 100,
             200, 300, 500,
             750, 1000,
@@ -21,13 +20,12 @@ class TraceletConfig:
             3000, 4000, 5000,
             float('inf')
         ] 
-        # fmt: on
 
         max_workers = kwargs.get("max_workers", 1)
         self.enabled = kwargs.get("enabled", True)
         self.batch_size = kwargs.get("batch_size", 50)
         self.flush_interval = kwargs.get("flush_interval", 5.0)
-        self.BUCKET_THRESHOLDS = kwargs.get("BUCKET_THRESHOLDS", BUCKET_THRESHOLDS)
+        self.BUCKET_THRESHOLDS = kwargs.get("BUCKET_THRESHOLDS", self.BUCKET_THRESHOLDS)
         logger_level = kwargs.get("logger_level", "INFO")
 
         db = self.configure_db(db_config)
@@ -48,15 +46,9 @@ class TraceletConfig:
             "batch_size": self.batch_size,
             "flush_interval": self.flush_interval,
             "BUCKET_THRESHOLDS": [
-                10,
-                25,
-                50,
-                100,
-                250,
-                500,
-                1000,
-                2500,
-                5000,
+                10, 25, 50,
+                100, 250, 500,
+                1000, 2500, 5000,
                 float("inf"),
             ],
             "tracelet_tables_created": self.tables_created,

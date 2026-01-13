@@ -14,9 +14,7 @@ Test Case:
 """
 
 import pytest  # type: ignore
-from datetime import datetime, timezone, timedelta
 from tracelet.tui.analytics import HistogramSnapshot, estimate_percentile
-from tracelet.db.models import Endpoints, Buckets
 from tracelet.config import settings
 
 
@@ -123,7 +121,6 @@ def test_percentile_calculation_with_deltas():
     ]
 
     # Total requests = 50 + 30 + 20 + 10 + 5 + 3 + 2 = 120
-    total_expected = 120
 
     # Calculate P50 (median) - should be around 25ms (60th request)
     # Distribution:
@@ -215,7 +212,7 @@ def test_zero_deltas_included():
     assert len(zero_deltas) == 1, f"Expected 1 zero delta, got {len(zero_deltas)}"
     assert (
         zero_deltas[0].threshold_ms == 250.0
-    ), f"Zero delta should be at 250ms threshold"
+    ), "Zero delta should be at 250ms threshold"
 
     # Verify percentile calculation works with zero deltas
     p50 = estimate_percentile(tuple(deltas), 50.0)

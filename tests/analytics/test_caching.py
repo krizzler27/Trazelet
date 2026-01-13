@@ -42,11 +42,11 @@ def test_ttl_cache_expiration():
         return x * 2
 
     # First call
-    result1 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Immediate second call - should use cache
-    result2 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Wait for TTL to expire
@@ -68,11 +68,11 @@ def test_ttl_cache_bypass():
         return x * 2
 
     # First call - should execute
-    result1 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Second call - should use cache
-    result2 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Third call with cache_bypass=True - should execute again
@@ -81,7 +81,7 @@ def test_ttl_cache_bypass():
     assert result3 == 10
 
     # Fourth call without bypass - should use cache again
-    result4 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 2  # Should still be 2 (from cache)
 
 
@@ -135,11 +135,11 @@ def test_lru_cache_bypass():
         return x * 2
 
     # First call
-    result1 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Second call - should use cache
-    result2 = cached_function(5)
+    cached_function(5)
     assert call_count[0] == 1
 
     # Third call with cache_bypass=True - should execute again
@@ -191,7 +191,7 @@ def test_cache_bypass_doesnt_modify_original_kwargs():
     assert call_count[0] == 1
 
     # Call again - should execute (cache_bypass was True, so not cached)
-    result2 = cached_function(5, some_other_param=10)
+    cached_function(5, some_other_param=10)
     assert call_count[0] == 2
 
 

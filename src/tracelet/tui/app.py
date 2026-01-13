@@ -326,7 +326,7 @@ def status(
         ),
         console=console,
         refresh_per_second=1,
-    ) as live:
+    ):
         with AnalyticsServiceContext(session) as service:
             report, window = service.generate_operational_report(
                 duration, no_cache=no_cache
@@ -373,7 +373,7 @@ def status(
     _render_detailed_table(report, window)
 
     # Grade distribution bar
-    console.print(f"\n[bold]Grade Distribution:[/bold]")
+    console.print("\n[bold]Grade Distribution:[/bold]")
     for grade in ["A", "B", "C", "D"]:
         count = grades[grade]
         pct = (count / len(report) * 100) if report else 0
@@ -424,7 +424,7 @@ def describe(
         ),
         console=console,
         refresh_per_second=1,
-    ) as live:
+    ):
         with AnalyticsServiceContext(session) as service:
             metrics, window = service.generate_operational_report(
                 duration_str=duration, endpoint_path=endpoint_path, no_cache=no_cache
@@ -490,7 +490,7 @@ def top(
         ),
         console=console,
         refresh_per_second=1,
-    ) as live:
+    ):
         with AnalyticsServiceContext(session) as service:
             metrics, window = service.generate_operational_report(
                 duration, no_cache=no_cache
