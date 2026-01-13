@@ -1,6 +1,7 @@
 import logging
 import sys
 
+
 class ColoredFormatter(logging.Formatter):
     # ANSI escape codes for colors
     GREEN = "\x1b[38;2;0;255;0m"
@@ -10,7 +11,6 @@ class ColoredFormatter(logging.Formatter):
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
 
-
     LOG_FORMAT = "%(asctime)s - [%(name)s: %(levelname)s] - %(message)s"
 
     FORMATS = {
@@ -18,28 +18,29 @@ class ColoredFormatter(logging.Formatter):
         logging.INFO: BLUE + LOG_FORMAT + RESET,
         logging.WARNING: YELLOW + LOG_FORMAT + RESET,
         logging.ERROR: RED + LOG_FORMAT + RESET,
-        logging.CRITICAL: BOLD_RED + LOG_FORMAT + RESET
+        logging.CRITICAL: BOLD_RED + LOG_FORMAT + RESET,
     }
-
 
     def format(self, record) -> str:
         log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(fmt=log_fmt, datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter(fmt=log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
         return formatter.format(record)
+
 
 def setup_logger() -> logging.Logger:
     """Configures the logger once and returns it."""
     logger = logging.getLogger("tracelet")
-    
-    #Only add handlers if they don't exist yet
+
+    # Only add handlers if they don't exist yet
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(ColoredFormatter())
-        
+
         logger.addHandler(console_handler)
-        logger.propagate = False 
-        
+        logger.propagate = False
+
     return logger
+
 
 logger = setup_logger()

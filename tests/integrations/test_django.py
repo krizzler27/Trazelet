@@ -12,6 +12,7 @@ import tracelet
 
 # --- Django + Tracelet setup -----------------------------------------------
 
+
 def setup_django(db_url: str | None = None) -> None:
     """
     Configure Django settings and initialize Tracelet middleware.
@@ -29,7 +30,7 @@ def setup_django(db_url: str | None = None) -> None:
             DEBUG=True,
             SECRET_KEY="test-key",
             ROOT_URLCONF=__name__,
-            ALLOWED_HOSTS = ["testserver", "127.0.0.1"],
+            ALLOWED_HOSTS=["testserver", "127.0.0.1"],
             INSTALLED_APPS=[
                 "django.contrib.contenttypes",
                 "django.contrib.auth",
@@ -62,6 +63,7 @@ setup_django()
 
 
 # --- Views & URLConf --------------------------------------------------------
+
 
 def root(request):
     """Basic fast route to test SUCCESS status."""
@@ -158,7 +160,9 @@ class TestDjangoIntegration:
 
     def test_create_item_endpoint(self, django_client: Client):
         payload = {"name": "Widget", "value": 42}
-        response = django_client.post("/items", payload, content_type="application/json")
+        response = django_client.post(
+            "/items", payload, content_type="application/json"
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Item Widget created"

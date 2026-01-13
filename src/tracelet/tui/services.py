@@ -15,9 +15,11 @@ from tracelet.tui.caching import lru_cache_decorator
 
 logger = logging.getLogger("tracelet")
 
+
 @dataclass
 class EndpointHealthMetrics:
     """Operational health snapshot for an endpoint."""
+
     endpoint_id: int
     path: str
     method: str
@@ -38,6 +40,7 @@ class EndpointHealthMetrics:
 @dataclass
 class TimeWindow:
     """Represents a time window for analytics queries."""
+
     start: datetime
     end: datetime
     label: str
@@ -80,15 +83,15 @@ class AnalyticsService:
         self,
         duration_str: str,
         endpoint_path: Optional[int] = None,
-        no_cache: bool = False
+        no_cache: bool = False,
     ) -> Tuple[List[EndpointHealthMetrics], Optional[TimeWindow]]:
         """
         Primary analytics query. Generate complete health report for endpoints.
-        
+
         Args:
             duration_str: Time window string (e.g., 'last_7d', '3 months')
             endpoint_id: Optional filter to single endpoint
-        
+
         Returns:
             (List of EndpointHealthMetrics, TimeWindow) or ([], None) if error
         """
@@ -98,24 +101,24 @@ class AnalyticsService:
             if not window:
                 logger.warning("Failed to parse duration: %s", duration_str)
                 return [], None
-            
+
             # 2. Fetch available endpoints
             all_endpoints = self.engine.fetch_active_endpoints(cache_bypass=no_cache)
             if not all_endpoints:
                 logger.warning("No active endpoints found")
                 return [], window
-            
+
             # Filter by endpoint_id if provided
             if endpoint_path:
-                endpoints = [ep for ep in all_endpoints if ep['path'] == endpoint_path]
+                endpoints = [ep for ep in all_endpoints if ep["path"] == endpoint_path]
                 if not endpoints:
                     logger.warning("Endpoint %d not found", endpoint_path)
                     return [], window
             else:
                 endpoints = all_endpoints
-            
-            endpoint_ids = [ep['id'] for ep in endpoints]
-            
+
+            endpoint_ids = [ep["id"] for ep in endpoints]
+
             # 3. BATCH FETCH: Get all summaries and apdex scores in one network call (avoid N+1)
             all_summaries = self.engine.fetch_batch_summary_stats(
                 tuple(endpoint_ids), window.start, window.end, cache_bypass=no_cache
@@ -129,54 +132,60 @@ class AnalyticsService:
 
             # 4. Build report for each endpoint
             report_data = []
-            
+
             for ep in endpoints:
-                eid = ep['id']
-                
+                eid = ep["id"]
+
                 # Get summary stats from Step: 3
-                summary = all_summaries.get(eid, {"mean": 0, "max": 0, "total": 0, "errors": 0})
+                summary = all_summaries.get(
+                    eid, {"mean": 0, "max": 0, "total": 0, "errors": 0}
+                )
                 apdex = all_apdex_scores.get(eid, 0.0)
-                
+
                 # Get window metrics from Step: 3
                 buckets = all_window_metrics.get(eid, [])
-                
+
                 if not buckets:
                     logger.debug("No bucket data for endpoint %d in window", eid)
                     continue
-                
+
                 # Calculate percentiles
                 # Convert buckets to a tuple for hashability with lru_cache
                 p50 = estimate_percentile(tuple(buckets), 50.0, cache_bypass=no_cache)
                 p95 = estimate_percentile(tuple(buckets), 95.0, cache_bypass=no_cache)
                 p99 = estimate_percentile(tuple(buckets), 99.0, cache_bypass=no_cache)
-                
+
                 # Calculate operational metrics
-                error_rate = self._calculate_error_percent(summary.get('total', 0), summary.get('errors', 0))
-                throughput = self._calculate_throughput(summary.get('total', 0), window.total_seconds())
-                
+                error_rate = self._calculate_error_percent(
+                    summary.get("total", 0), summary.get("errors", 0)
+                )
+                throughput = self._calculate_throughput(
+                    summary.get("total", 0), window.total_seconds()
+                )
+
                 # Assign health grade
                 health_grade = self._assign_health_grade(p99, error_rate, apdex)
-                
+
                 # Build metrics object
                 metrics = EndpointHealthMetrics(
                     endpoint_id=eid,
-                    path=ep['path'],
-                    method=ep['method'],
-                    framework=ep['framework'],
+                    path=ep["path"],
+                    method=ep["method"],
+                    framework=ep["framework"],
                     p50_ms=p50,
                     p95_ms=p95,
                     p99_ms=p99,
                     error_rate_percent=error_rate,
                     throughput_rps=throughput,
                     apdex_score=apdex,
-                    request_count=summary.get('total', 0),
-                    error_count=summary.get('errors', 0),
+                    request_count=summary.get("total", 0),
+                    error_count=summary.get("errors", 0),
                     health_grade=health_grade,
                     data_start=window.start,
-                    data_end=window.end
+                    data_end=window.end,
                 )
                 report_data.append(metrics)
-            
+
             return report_data, window
 
         except Exception as e:
@@ -184,14 +193,16 @@ class AnalyticsService:
             return [], None
 
     @lru_cache_decorator(maxsize=128)
-    def _parse_window(self, duration_str: str, cache_bypass: bool = False) -> Optional[TimeWindow]:
+    def _parse_window(
+        self, duration_str: str, cache_bypass: bool = False
+    ) -> Optional[TimeWindow]:
         """
         Parse duration string and return TimeWindow.
-        
+
         Supports:
             - Presets: 'last_24h', 'last_7d', 'last_30d', 'last_90d', 'last_1y'
             - Custom: '7 days', '2 weeks', '3 months', '1 year'
-        
+
         Auto-adjusts if window exceeds available data.
         """
         try:
@@ -202,11 +213,11 @@ class AnalyticsService:
 
             # Preset formats
             presets = {
-                'last_24h': (timedelta(hours=24), "Last 24 Hours"),
-                'last_7d': (timedelta(days=7), "Last 7 Days"),
-                'last_30d': (timedelta(days=30), "Last 30 Days"),
-                'last_90d': (timedelta(days=90), "Last 90 Days"),
-                'last_1y': (timedelta(days=365), "Last 1 Year"),
+                "last_24h": (timedelta(hours=24), "Last 24 Hours"),
+                "last_7d": (timedelta(days=7), "Last 7 Days"),
+                "last_30d": (timedelta(days=30), "Last 30 Days"),
+                "last_90d": (timedelta(days=90), "Last 90 Days"),
+                "last_1y": (timedelta(days=365), "Last 1 Year"),
             }
 
             if duration_str in presets:
@@ -220,55 +231,67 @@ class AnalyticsService:
                         "Invalid format. Use: '7 days', '2 weeks', '3 months', '1 year' "
                         "or presets: 'last_24h', 'last_7d', etc."
                     )
-                
+
                 try:
                     count = int(parts[0])
                 except ValueError:
                     raise ValueError(f"First part must be a number, got: {parts[0]}")
-                
+
                 unit = parts[1]
-                if unit.startswith('day'):
+                if unit.startswith("day"):
                     start_time = end_time - timedelta(days=count)
                     label = f"Last {count} Day{'s' if count > 1 else ''}"
-                elif unit.startswith('week'):
+                elif unit.startswith("week"):
                     start_time = end_time - timedelta(weeks=count)
                     label = f"Last {count} Week{'s' if count > 1 else ''}"
-                elif unit.startswith('month'):
+                elif unit.startswith("month"):
                     start_time = end_time - timedelta(days=count * 30)
                     label = f"Last {count} Month{'s' if count > 1 else ''}"
-                elif unit.startswith('year'):
+                elif unit.startswith("year"):
                     start_time = end_time - timedelta(days=count * 365)
                     label = f"Last {count} Year{'s' if count > 1 else ''}"
                 else:
-                    raise ValueError(f"Unknown unit: {unit}. Use: days, weeks, months, years")
-            
+                    raise ValueError(
+                        f"Unknown unit: {unit}. Use: days, weeks, months, years"
+                    )
+
             # Adjust if window exceeds available data
-            earliest, latest = self.engine.fetch_data_time_range(cache_bypass=cache_bypass)
-            
-            if earliest is None or latest is None: # Handle case where no data is available
-                logger.warning("No historical data available to determine time range. Cannot adjust window.")
-                return TimeWindow(start=start_time, end=end_time, label=label) # Return window without adjustment
+            earliest, latest = self.engine.fetch_data_time_range(
+                cache_bypass=cache_bypass
+            )
+
+            if (
+                earliest is None or latest is None
+            ):  # Handle case where no data is available
+                logger.warning(
+                    "No historical data available to determine time range. Cannot adjust window."
+                )
+                return TimeWindow(
+                    start=start_time, end=end_time, label=label
+                )  # Return window without adjustment
 
             earliest = earliest.replace(tzinfo=timezone.utc)
             latest = latest.replace(tzinfo=timezone.utc)
             if earliest and start_time < earliest:
                 logger.info(
                     "Data only available from %s; adjusting window from %s",
-                    earliest.strftime('%Y-%m-%d %H:%M'),
-                    start_time.strftime('%Y-%m-%d %H:%M')
+                    earliest.strftime("%Y-%m-%d %H:%M"),
+                    start_time.strftime("%Y-%m-%d %H:%M"),
                 )
                 start_time = earliest
-            
+
             return TimeWindow(start=start_time, end=end_time, label=label)
-        
+
         except ValueError as e:
             logger.error("Time window parse error: %s", e)
             return None
 
-    def _assign_health_grade(self, p99_ms: float, error_rate: float, apdex: float) -> str:
+    def _assign_health_grade(
+        self, p99_ms: float, error_rate: float, apdex: float
+    ) -> str:
         """
         Assign A/B/C/D health grade based on composite metrics.
-        
+
         Grading Logic:
             A: P99 < 200ms AND Error% < 1% AND Apdex >= 0.95
             B: P99 < 500ms AND Error% < 5% AND Apdex >= 0.85
@@ -307,23 +330,24 @@ class AnalyticsService:
 # Context Manager Support for Automatic Cleanup
 # ============================================================================
 
+
 class AnalyticsServiceContext:
     """
     Context manager for AnalyticsService to ensure proper cleanup.
-    
+
     Usage:
         with AnalyticsServiceContext(session) as service:
             report, window = service.generate_operational_report("last_7d")
     """
-    
+
     def __init__(self, session: session):
         self.session = session
         self.service = None
-    
+
     def __enter__(self) -> AnalyticsService:
         self.service = AnalyticsService(self.session)
         return self.service
-    
+
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
         if self.service:
             self.service.close()

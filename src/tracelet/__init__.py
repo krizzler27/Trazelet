@@ -1,5 +1,6 @@
 from tracelet.config import settings
 
+
 def init(db_config=None, **kwargs):
     """
     Initializes the Tracelet engine and background workers.
@@ -9,7 +10,7 @@ def init(db_config=None, **kwargs):
             - 'db_url' (str): SQLAlchemy connection string.
             - 'echo' (bool): If True, SQLAlchemy will log SQL queries. (Default: False)
             - 'connect_args' (dict): Extra args for the DB driver (e.g., {'timeout': 30}).
-        
+
         **kwargs:
             - enabled (bool): Enable or disable Tracelet tracking. (Default: True)
             - max_workers (int): Number of background threads for processing. (Default: 1)

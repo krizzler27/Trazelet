@@ -17,7 +17,7 @@ class FlaskMiddleware:
         app.after_request(self._after_request)
 
     def _before_request(self):
-        # We put these on the 'Tray' (g) because this function 
+        # We put these on the 'Tray' (g) because this function
         # will end before the response is ready.
         g._tracelet_start_perf = time.perf_counter()
         g._tracelet_start_dt = datetime.now(timezone.utc)
@@ -30,7 +30,7 @@ class FlaskMiddleware:
             if request.url_rule:
                 path = request.url_rule.rule
             else:
-                path = request.path # Fallback for 404s where no route matched
+                path = request.path  # Fallback for 404s where no route matched
 
             data = {
                 "path": path,

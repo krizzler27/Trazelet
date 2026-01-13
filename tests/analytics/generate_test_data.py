@@ -12,7 +12,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
-import numpy as np # type: ignore
+import numpy as np  # type: ignore
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -134,6 +134,7 @@ ENDPOINTS_CONFIG = [
 # Database & Engine Initialization
 # ============================================================================
 
+
 def init_tracelet() -> tuple:
     """
     Initialize Tracelet engine and database session.
@@ -170,9 +171,11 @@ def shutdown_tracelet(engine) -> None:
 
     logger.info("✓ Engine shutdown complete")
 
+
 # ============================================================================
 # Traffic Pattern Simulation
 # ============================================================================
+
 
 def get_traffic_multiplier(timestamp: datetime) -> float:
     """
@@ -219,6 +222,7 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
 # Latency Generation
 # ============================================================================
 
+
 def generate_latency(mean: float, stdev: float) -> float:
     """
     Generate realistic latency using a normal distribution.
@@ -227,9 +231,11 @@ def generate_latency(mean: float, stdev: float) -> float:
     latency = np.random.lognormal(mean=np.log(mean), sigma=0.5)
     return min(latency, 5000.0)
 
+
 # ============================================================================
 # Endpoint Creation
 # ============================================================================
+
 
 def create_endpoints(session: Session, default_dt: datetime) -> Dict[int, Dict]:
     """
@@ -284,18 +290,18 @@ def create_endpoints(session: Session, default_dt: datetime) -> Dict[int, Dict]:
         session.rollback()
         raise
 
+
 # ============================================================================
 # Historical Data Generation
 # ============================================================================
 
+
 def generate_historical_data(
-    engine, 
-    endpoint_map: Dict[int, Dict], 
-    days: int
+    engine, endpoint_map: Dict[int, Dict], days: int
 ) -> Tuple[bool, List[Tuple[datetime, datetime]]]:
     """
     Generate historical metrics using Tracelet's capture() engine.
-    
+
     Returns:
         (success, snapshot_windows) where snapshot_windows = [(start, end), ...]
     """
@@ -314,7 +320,7 @@ def generate_historical_data(
         while current_time < now:
             snapshot_start = current_time
             snapshot_end = current_time + SNAPSHOT_INTERVAL
-            
+
             for endpoint_id, config in endpoint_map.items():
                 traffic_multiplier = get_traffic_multiplier(current_time)
                 metrics_count = int(METRICS_PER_SNAPSHOT * traffic_multiplier)
@@ -348,7 +354,7 @@ def generate_historical_data(
                     )
 
                     total_metrics += 1
-            
+
             # Track this snapshot window for backfill
             snapshot_windows.append((snapshot_start, snapshot_end))
             current_time += SNAPSHOT_INTERVAL
@@ -371,116 +377,138 @@ def generate_historical_data(
 # Timestamp Backfill
 # ============================================================================
 
+
 def backfill_timestamps(
     session: Session,
     snapshot_windows: List[Tuple[datetime, datetime]],
-    generation_start: datetime
+    generation_start: datetime,
 ) -> bool:
     """
     Backfill historical timestamps for metrics and buckets.
-    
+
     Phase 1: Update tracelet_metrics.created_at based on latency window
     Phase 2: Update tracelet_latency_buckets.captured_at to snapshot boundaries
-    
+
     Args:
         session: DB session
         snapshot_windows: List of (start, end) tuples for each 5-min window
         generation_start: When data generation began (metrics after this need backfill)
     """
     logger.info("Backfilling timestamps...")
-    
+
     try:
         # Phase 1: Backfill metrics timestamps
         logger.info("  Phase 1: Updating tracelet_metrics.created_at...")
-        
+
         # Get all metrics created during generation
-        metrics = session.query(Metrics).filter(
-            Metrics.created_at >= generation_start
-        ).order_by(Metrics.created_at).all()
-        
+        metrics = (
+            session.query(Metrics)
+            .filter(Metrics.created_at >= generation_start)
+            .order_by(Metrics.created_at)
+            .all()
+        )
+
         if not metrics:
             logger.warning("  No metrics found to backfill")
             return False
-        
+
         logger.info(f"  Found {len(metrics):,} metrics to backfill")
-        
+
         # Distribute metrics across snapshot windows
         metrics_per_window = len(metrics) // len(snapshot_windows)
         window_idx = 0
-        
+
         for i, metric in enumerate(metrics):
             # Move to next window when threshold reached
-            if i > 0 and i % metrics_per_window == 0 and window_idx < len(snapshot_windows) - 1:
+            if (
+                i > 0
+                and i % metrics_per_window == 0
+                and window_idx < len(snapshot_windows) - 1
+            ):
                 window_idx += 1
-            
+
             window_start, window_end = snapshot_windows[window_idx]
-            
+
             # Random timestamp within this window
-            random_offset = random.uniform(0, (window_end - window_start).total_seconds())
+            random_offset = random.uniform(
+                0, (window_end - window_start).total_seconds()
+            )
             backfill_time = window_start + timedelta(seconds=random_offset)
-            
+
             metric.created_at = backfill_time
-        
+
         session.commit()
         logger.info(f"  ✓ Updated {len(metrics):,} metrics timestamps")
-        
+
         # Phase 2: Backfill bucket snapshots
         logger.info("  Phase 2: Updating tracelet_latency_buckets.captured_at...")
-        
+
         # Get all buckets created during generation
-        buckets = session.query(Buckets).filter(
-            Buckets.captured_at >= generation_start
-        ).order_by(Buckets.endpoint_id, Buckets.captured_at, Buckets.le).all()
-        
+        buckets = (
+            session.query(Buckets)
+            .filter(Buckets.captured_at >= generation_start)
+            .order_by(Buckets.endpoint_id, Buckets.captured_at, Buckets.le)
+            .all()
+        )
+
         if not buckets:
             logger.warning("  No buckets found to backfill")
             return True  # Metrics were updated, consider success
-        
+
         logger.info(f"  Found {len(buckets):,} bucket records to backfill")
-        
+
         # Group buckets by (endpoint_id, captured_at) to form complete snapshots
         # All buckets with same endpoint_id and captured_at form one snapshot
         from collections import defaultdict
+
         snapshot_groups = defaultdict(list)
-        
+
         for bucket in buckets:
             snapshot_key = (bucket.endpoint_id, bucket.captured_at)
             snapshot_groups[snapshot_key].append(bucket)
-        
+
         logger.info(f"  Found {len(snapshot_groups):,} distinct snapshots")
-        
+
         # Group snapshots by endpoint_id for sequential assignment
         endpoint_snapshots = defaultdict(list)
         for (eid, _), snapshot_buckets in snapshot_groups.items():
-            endpoint_snapshots[eid].append((snapshot_buckets[0].captured_at, snapshot_buckets))
-        
+            endpoint_snapshots[eid].append(
+                (snapshot_buckets[0].captured_at, snapshot_buckets)
+            )
+
         # Assign entire snapshots to sequential snapshot windows
         for endpoint_id, snapshots in endpoint_snapshots.items():
             # Sort snapshots by original captured_at to maintain chronological order
             snapshots.sort(key=lambda x: x[0])
-            
+
             # Distribute snapshots across windows
             snapshots_per_window = len(snapshots) // len(snapshot_windows)
             if snapshots_per_window == 0:
                 snapshots_per_window = 1
-            
+
             window_idx = 0
             for i, (original_ts, snapshot_buckets) in enumerate(snapshots):
                 # Move to next window when threshold reached
-                if i > 0 and i % snapshots_per_window == 0 and window_idx < len(snapshot_windows) - 1:
+                if (
+                    i > 0
+                    and i % snapshots_per_window == 0
+                    and window_idx < len(snapshot_windows) - 1
+                ):
                     window_idx += 1
-                
+
                 # Assign entire snapshot to window boundary (end time)
                 new_timestamp = snapshot_windows[window_idx][1]
                 for bucket in snapshot_buckets:
                     bucket.captured_at = new_timestamp
-        
+
         session.commit()
-        logger.info(f"  ✓ Updated {len(buckets):,} bucket records across {len(snapshot_groups):,} snapshots")
+        logger.info(
+            f"  ✓ Updated {len(buckets):,} bucket records across {len(snapshot_groups):,} snapshots"
+        )
         logger.info("✓ Timestamp backfill complete\n")
-        
+
         return True
-        
+
     except Exception as e:
         logger.error(f"Error in timestamp backfill: {e}", exc_info=True)
         session.rollback()
@@ -490,6 +518,7 @@ def backfill_timestamps(
 # ============================================================================
 # Main Pipeline
 # ============================================================================
+
 
 def generate_test_data(clear_existing: bool = True, days: int = DAYS_OF_DATA) -> bool:
     """
@@ -515,31 +544,31 @@ def generate_test_data(clear_existing: bool = True, days: int = DAYS_OF_DATA) ->
             session.query(Endpoints).delete()
             session.commit()
             logger.info("✓ Data cleared\n")
-        
+
         # Create endpoints
         endpoint_map = create_endpoints(session, generation_start)
         if not endpoint_map:
             logger.error("No endpoints created")
             return False
-        
+
         # Generate data
         success, snapshot_windows = generate_historical_data(engine, endpoint_map, days)
         if not success:
             logger.error("Data generation failed")
             return False
-        
+
         # Backfill timestamps
         if not backfill_timestamps(session, snapshot_windows, generation_start):
             logger.warning("Timestamp backfill failed, but data exists")
-        
+
         # Verify
         verify_data(session)
-        
+
         logger.info("\n🎉 Test data generation successful!")
         logger.info("Ready for: tracelet describe -d last_7d")
-        
+
         return True
-        
+
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         return False
@@ -547,9 +576,11 @@ def generate_test_data(clear_existing: bool = True, days: int = DAYS_OF_DATA) ->
         shutdown_tracelet(engine)
         session.close()
 
+
 # ============================================================================
 # Data Verification
 # ============================================================================
+
 
 def verify_data(session: Session) -> None:
     """Verify generated data integrity."""
@@ -567,7 +598,7 @@ def verify_data(session: Session) -> None:
 
     m_min = session.query(func.min(Metrics.created_at)).scalar()
     m_max = session.query(func.max(Metrics.created_at)).scalar()
-    
+
     b_min = session.query(func.min(Buckets.captured_at)).scalar()
     b_max = session.query(func.max(Buckets.captured_at)).scalar()
 
@@ -575,12 +606,12 @@ def verify_data(session: Session) -> None:
         logger.info(f"  ✓ Metrics date range: {(m_max - m_min).days} days")
         logger.info(f"    Earliest: {m_min.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         logger.info(f"    Latest: {m_max.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    
+
     if b_min and b_max:
         logger.info(f"  ✓ Buckets date range: {(b_max - b_min).days} days")
         logger.info(f"    Earliest: {b_min.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         logger.info(f"    Latest: {b_max.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    
+
     if m_min:
         logger.info(f"  ✓ Timezone: {'UTC' if m_min.tzinfo else 'NONE (ERROR)'}")
 
@@ -604,14 +635,13 @@ def cleanup_data() -> bool:
     finally:
         session.close()
 
+
 # ============================================================================
 # CLI Entry Point
 # ============================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Tracelet Test Data Generator"
-    )
+    parser = argparse.ArgumentParser(description="Tracelet Test Data Generator")
 
     parser.add_argument(
         "--generate",

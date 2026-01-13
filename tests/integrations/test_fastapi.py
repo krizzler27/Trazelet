@@ -11,6 +11,7 @@ from tracelet.integrations.fastapi import FastAPIMiddleware
 
 # --- Application factory ----------------------------------------------------
 
+
 class Item(BaseModel):
     name: str
     description: str | None = None
@@ -31,7 +32,9 @@ def create_app(db_url: str | None = None) -> FastAPI:
         "db_url": db_url,
         "echo": False,
     }
-    tracelet.init(max_workers=2, enabled=True, db_config=db_config, logger_level='debug')
+    tracelet.init(
+        max_workers=2, enabled=True, db_config=db_config, logger_level="debug"
+    )
 
     app = FastAPI(title="Tracelet Test Suite")
     app.add_middleware(FastAPIMiddleware)

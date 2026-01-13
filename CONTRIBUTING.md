@@ -23,15 +23,24 @@ To ensure code quality and consistency, please follow these steps for any contri
 To set up your local development environment:
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/yourusername/tracelet.git
 cd tracelet
 
-# Install in development mode with all optional dependencies
-pip install -e ".[fastapi,flask,django]"
+# 2. Install uv (if needed)
+# On macOS and Linux.
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install testing dependencies
-pip install pytest pytest-cov
+# On Windows.
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# With pip.
+pip install uv
+
+# 3. Sync everything
+# Install the project in development mode
+# This creates the .venv, installs dependencies, and enables the --extras
+uv sync --extra dev
 ```
 
 ### Running Tests & Benchmarks

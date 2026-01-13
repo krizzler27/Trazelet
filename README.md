@@ -30,6 +30,7 @@ Most developers don't know their API is slow until a user complains. Enterprise 
 - ⚡ **Production-Ready**: Thread-safe, battle-tested architecture
 - 📊 **Built-in Performance Analytics**: Actionable HTTP and API performance metrics out of the box
 - 💻 **Modern TUI Interface**: Access real-time and historical analytics through a Rich-powered terminal UI
+
 ---
 
 ## ✨ Features
@@ -332,13 +333,14 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](../../issues)
-- **Discussions**: [GitHub Discussions](../../discussions)
+- **Issues**: [GitHub Issues](./issues)
+- **Discussions**: [GitHub Discussions](./discussions)
 
 ---
 
 <div align="center">
 
-[⭐ Star us on GitHub](../Tracelet) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](../../issues)
+[⭐ Star us on GitHub](.) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](./issues)
 
-`</div>`
+
+</div>

@@ -9,6 +9,7 @@ from tracelet.integrations.flask import FlaskMiddleware
 
 # --- Application factory ----------------------------------------------------
 
+
 def create_app(db_url: str | None = None) -> Flask:
     """
     Create a Flask app wired with Tracelet middleware.

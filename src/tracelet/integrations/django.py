@@ -4,6 +4,7 @@ from django.urls import resolve
 from tracelet.core.engine import _Engine, get_engine
 from tracelet.utils.logger_config import logger
 
+
 class DjangoMiddleware:
     def __init__(self, get_response, engine: _Engine = None):
         self.get_response = get_response
@@ -19,9 +20,9 @@ class DjangoMiddleware:
             response = self.get_response(request)
 
             elapsed = time.perf_counter() - start_perf
-            
+
             #  --- Path Normalization ---
-            route = getattr(request, 'resolver_match', None)
+            route = getattr(request, "resolver_match", None)
             if not route:
                 try:
                     route = resolve(request.path_info)

@@ -36,6 +36,7 @@ dev = [
     "pytest>=9.0.2",
     "djangorestframework>=3.16.1",
     "numpy>=2.4.1",
+    "ruff>=0.14.11",
 ]
 
 [tool.setuptools]
@@ -43,6 +44,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[dependency-groups]
-dev = []
