@@ -6,7 +6,6 @@ Tests all analytics functions with generated test data.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 from tracelet.tui.analytics import AnalyticsEngine, estimate_percentile
 from tracelet.tui.services import AnalyticsService

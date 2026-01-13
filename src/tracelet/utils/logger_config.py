@@ -31,7 +31,7 @@ def setup_logger() -> logging.Logger:
     """Configures the logger once and returns it."""
     logger = logging.getLogger("tracelet")
     
-    # CRITICAL: Only add handlers if they don't exist yet
+    #Only add handlers if they don't exist yet
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         console_handler = logging.StreamHandler(sys.stdout)

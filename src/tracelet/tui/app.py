@@ -1,4 +1,3 @@
-# tracelet/cli/cli_app.py
 """
 Tracelet CLI using Typer + Rich.
 Modern, interactive analytics interface with real-time feedback.
@@ -24,7 +23,7 @@ from tracelet.tui.services import AnalyticsServiceContext
 
 logger = logging.getLogger("tracelet")
 console = Console()
-logger.setLevel("DEBUG")
+# logger.setLevel("DEBUG")
 
 app = typer.Typer(
     help="📊 Tracelet Analytics — Modern API Performance Insights",
@@ -373,7 +372,6 @@ def status(
         )
 
 
-
 @app.command()
 @cli_error_handler
 def describe(
@@ -384,11 +382,11 @@ def describe(
         "-d",
         help="⏱️  Time window"
     ),
-    endpoint_id: Optional[int] = typer.Option(
+    endpoint_path: Optional[str] = typer.Option(
         None,
         "--endpoint",
         "-e",
-        help="🎯 Filter to specific endpoint by ID"
+        help="🎯 Filter to specific endpoint by path"
     ),
     format: str = typer.Option(
         "table",
@@ -432,7 +430,7 @@ def describe(
         refresh_per_second=1
     ) as live:
         with AnalyticsServiceContext(session) as service:
-            metrics, window = service.generate_operational_report(duration_str=duration, endpoint_id=endpoint_id, no_cache=no_cache)
+            metrics, window = service.generate_operational_report(duration_str=duration, endpoint_path=endpoint_path, no_cache=no_cache)
 
     if not metrics or not window:
         console.print("[yellow]⚠️  No metrics data available[/yellow]")

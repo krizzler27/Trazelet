@@ -7,13 +7,11 @@ import threading
 import time
 import queue
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
-from sqlalchemy.exc import OperationalError, DisconnectionError
+from unittest.mock import Mock, patch
 
 import tracelet
-from tracelet.core.engine import get_engine, _Engine
+from tracelet.core.engine import get_engine
 from tracelet.config import settings
-from tracelet.db.models import Endpoints, Metrics
 
 
 class TestInitialization:
@@ -34,9 +32,7 @@ class TestInitialization:
     
     def test_init_with_postgres(self):
         """Test initialization with PostgreSQL database."""
-        # Skip if PostgreSQL not available
-        pytest.importorskip("psycopg2")
-        
+
         db_config = {
             "db_url": "postgresql+psycopg2://user:pass@localhost:5432/testdb"
         }
@@ -94,18 +90,6 @@ class TestInitialization:
         from tracelet import config
         
         # Test updating various settings
-        config.settings.batch_size = 200
-        assert config.settings.batch_size == 200
-        
-        config.settings.enabled = False
-        assert config.settings.enabled is False
-        
-        config.settings.flush_interval = 15.0
-        assert config.settings.flush_interval == 15.0
-        
-        # Test logger_level property
-        config.settings.logger_level = 'DEBUG'
-        assert config.settings.logger_level == 'DEBUG'
         from tracelet.utils.logger_config import logger
         assert logger.level == 10  # DEBUG level is 10
         

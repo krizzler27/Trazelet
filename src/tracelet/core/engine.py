@@ -32,7 +32,7 @@ class _Engine:
         
         self._queue = queue.Queue()
         
-        # endpoint cache (Key: (path, framework) -> Value: endpoint_id)
+        # endpoint cache (Key: (path, method, framework) -> Value: endpoint_id)
         self._endpoint_cache = {}
         self._cache_lock = threading.Lock()
         
@@ -188,9 +188,7 @@ class _Engine:
                     for threshold in settings.BUCKET_THRESHOLDS:
                         if (eid, threshold) not in self.cumulative_counter:
                             self.cumulative_counter[(eid, threshold)] = 0
-                            logger.debug(
-                                f"Initialized missing threshold {threshold}ms for endpoint {eid} to 0"
-                            )
+                            logger.debug(f"Initialized missing threshold {threshold}ms for endpoint {eid} to 0")
             else:
                 # No existing data - check if endpoints exist and initialize all thresholds
                 existing_endpoints = session.query(Endpoints.endpoint_id).all()
@@ -256,10 +254,11 @@ class _Engine:
                 logger.debug("Initiating transaction for bulk Metrics and Buckets insertion")
                 session.bulk_insert_mappings(Metrics, metrics_data)
                 if bucket_data:
+                    conflict_cols = [Buckets.endpoint_id, Buckets.le, Buckets.captured_at]
                     insert = pg_insert if settings.db_type == 'postgres' else sqlite_insert
                     stmt = insert(Buckets).values(bucket_data)
                     stmt = stmt.on_conflict_do_update(
-                        constraint='_endpoint_bucket_snapshot_uc',
+                        index_elements=conflict_cols,
                         set_={'count': stmt.excluded.count}
                     )
                     session.execute(stmt)

@@ -25,8 +25,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
     manual demo server (optionally with PostgreSQL).
     """
     if db_url is None:
-        # Lightweight default for tests: in-memory SQLite
-        db_url = "sqlite:///:memory:"
+        db_url = "sqlite:///tracelet.db"
 
     db_config = {
         "db_url": db_url,
@@ -141,8 +140,8 @@ if __name__ == "__main__":
     # Quick manual test server, using PostgreSQL by default.
     import uvicorn
 
-    USER = "USER"
-    PASSWORD = "PASSWORD"
+    USER = "user"
+    PASSWORD = "password"
     postgres_db_url = f"postgresql+psycopg2://{USER}:{PASSWORD}@localhost:5432/tracelet"
 
     demo_app = create_app(db_url=postgres_db_url)

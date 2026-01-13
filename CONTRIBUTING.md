@@ -1,6 +1,6 @@
 # Contributing to Tracelet
 
-We welcome contributions! This guide outlines how to set up your environment, adhere to standards, and contribute to the project's evolution.
+This project is a work in progress, and your insight is the missing piece. Whether you've found a bug, have a feature you're dying to see, or just want to tackle a 'Good First Issue', your contribution makes this project better for everyone.
 
 ---
 

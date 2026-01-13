@@ -21,7 +21,7 @@ class FastAPIMiddleware(BaseHTTPMiddleware):
 
             elapsed = time.perf_counter() - start_perf
             
-            # Get path --- Normalization ---
+            #  --- Path Normalization ---
             route = request.scope.get("route")
             path = route.path if route and hasattr(route, "path") else request.url.path
 

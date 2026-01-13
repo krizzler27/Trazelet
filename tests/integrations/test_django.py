@@ -6,8 +6,6 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.test import Client
 from django.urls import path
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
 
 import tracelet
 
@@ -21,7 +19,7 @@ def setup_django(db_url: str | None = None) -> None:
     Safe to call multiple times; configuration only happens once.
     """
     if db_url is None:
-        db_url = "sqlite:///:memory:"
+        db_url = "sqlite:///tracelet.db"
 
     db_config = {"db_url": db_url, "echo": False}
     tracelet.init(max_workers=2, enabled=True, db_config=db_config)
@@ -31,6 +29,7 @@ def setup_django(db_url: str | None = None) -> None:
             DEBUG=True,
             SECRET_KEY="test-key",
             ROOT_URLCONF=__name__,
+            ALLOWED_HOSTS = ["testserver", "127.0.0.1"],
             INSTALLED_APPS=[
                 "django.contrib.contenttypes",
                 "django.contrib.auth",
@@ -58,6 +57,10 @@ def setup_django(db_url: str | None = None) -> None:
         django.setup()
 
 
+# Call setup immediately at module load to prevent import-time decorator failures
+setup_django()
+
+
 # --- Views & URLConf --------------------------------------------------------
 
 def root(request):
@@ -79,6 +82,11 @@ def trigger_error(request):
 def not_found(request):
     """Simulates a 404 missing resource."""
     return JsonResponse({"detail": "Resource missing"}, status=404)
+
+
+# Import DRF components AFTER setup_django()
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 
 @api_view(["POST"])
@@ -122,7 +130,6 @@ def reset_tracelet_engine():
 
 @pytest.fixture
 def django_client():
-    setup_django()
     return Client()
 
 
@@ -151,7 +158,7 @@ class TestDjangoIntegration:
 
     def test_create_item_endpoint(self, django_client: Client):
         payload = {"name": "Widget", "value": 42}
-        response = django_client.post("/items", payload)
+        response = django_client.post("/items", payload, content_type="application/json")
         assert response.status_code == 200
         data = response.json()
         assert data["message"] == "Item Widget created"
@@ -168,6 +175,5 @@ class TestDjangoIntegration:
 if __name__ == "__main__":
     from django.core.management import execute_from_command_line
 
-    setup_django()
     print("\n--- Django running on http://127.0.0.1:7001 ---")
     execute_from_command_line(["manage.py", "runserver", "7001"])

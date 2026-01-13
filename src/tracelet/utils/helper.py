@@ -23,7 +23,7 @@ def clean_url_path(path: str) -> str:
     if path.endswith("/") and len(path) > 1:
         path = path.rstrip("/")
 
-    # 2. The "Normalization" Step (The Missing Feature)
+    # 2. The "Normalization" Step
     # This catches IDs/UUIDs if the framework didn't already normalize them
     # Replace UUIDs with <uuid>
     path = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<uuid>', path)

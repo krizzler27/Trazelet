@@ -1,4 +1,3 @@
-# scripts/generate_test_data.py
 """
 Tracelet Test Data Generator
 Generates realistic historical latency data for testing analytics.
@@ -146,7 +145,7 @@ def init_tracelet() -> tuple:
     from tracelet.core.engine import get_engine
 
     db_config = {
-        "db_url": "postgresql+psycopg2://USER:PASSWORD@localhost:5432/tracelet",
+        "db_url": "postgresql+psycopg2://kriz:root@localhost:5432/tracelet",
         "echo": False,
     }
 
@@ -179,15 +178,15 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
     """
     Simulate realistic daily and weekly traffic patterns.
 
-    Weekdays (Mon–Fri):
-      - Business hours (9–17): 1.0–1.5x
-      - Evening (17–22): 0.8–1.1x
-      - Night: 0.2–0.4x
+    Weekdays (Mon-Fri):
+      - Business hours (9-17): 1.0-1.5x
+      - Evening (17-22): 0.8-1.1x
+      - Night: 0.2-0.4x
 
-    Weekends (Sat–Sun):
+    Weekends (Sat-Sun):
       - Late start, reduced overall traffic
       - Peak window shifted later
-      - Overall scale: 40–60% of weekday load
+      - Overall scale: 40-60% of weekday load
     """
     hour = timestamp.hour
     weekday = timestamp.weekday()  # 0=Mon, 6=Sun
@@ -225,8 +224,8 @@ def generate_latency(mean: float, stdev: float) -> float:
     Generate realistic latency using a normal distribution.
     Clamped to [1ms, 10000ms].
     """
-    latency = np.random.normal(mean, stdev)
-    return max(1.0, min(10000.0, latency))
+    latency = np.random.lognormal(mean=np.log(mean), sigma=0.5)
+    return min(latency, 5000.0)
 
 # ============================================================================
 # Endpoint Creation

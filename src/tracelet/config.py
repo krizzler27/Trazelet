@@ -5,17 +5,27 @@ class TraceletConfig:
     def __init__(self):
         self.tables_created = False
         self._logger_level = "INFO"
-        self.BUCKET_THRESHOLDS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, float('inf')]
 
     def configure(self, db_config=None, **kwargs):
 
         logger.info("Initializing Tracelet...")
         logger.info("Setting Up user settings")
 
+        BUCKET_THRESHOLDS = [
+            25, 50, 100,
+            200, 300, 500,
+            750, 1000,
+            1500, 2000,
+            3000, 4000, 5000,
+            float('inf')
+        ]
+
+
         max_workers = kwargs.get('max_workers', 1)
         self.enabled = kwargs.get('enabled', True)
         self.batch_size = kwargs.get('batch_size', 50)
         self.flush_interval = kwargs.get('flush_interval', 5.0)
+        self.BUCKET_THRESHOLDS = kwargs.get('BUCKET_THRESHOLDS', BUCKET_THRESHOLDS)
         logger_level = kwargs.get('logger_level', 'INFO')
         
         db = self.configure_db(db_config)
@@ -52,7 +62,6 @@ class TraceletConfig:
         db = setup_db(db_config=db_config if db_config else {})
         self.engine = db.engine
         self.SessionLocal = db.SessionLocal
-        print("engine: ", db)
         logger.info("Database configuration Completed")
         create_tables()
 

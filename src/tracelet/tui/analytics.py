@@ -1,9 +1,8 @@
-# tracelet/utils/analytics.py
 """
 PostgreSQL analytics layer for Tracelet.
 Handles percentile calculations, health metrics, and time-window aggregations.
 Uses cumulative bucket snapshots for O(1) query performance.
-Pure SQLAlchemy ORM (no raw SQL).
+Pure SQLAlchemy ORM.
 """
 
 import logging
@@ -352,7 +351,6 @@ class AnalyticsEngine:
                         delta = end_count - start_count
                     
                     # Include ALL buckets (including zero deltas) for complete histogram representation
-                    # Zero deltas are important for maintaining histogram structure
                     final_batch_buckets[eid].append(
                         HistogramSnapshot(threshold_ms=le, cumulative_count=delta)
                     )
@@ -401,7 +399,7 @@ def estimate_percentile(snapshots: Tuple[HistogramSnapshot, ...], percentile: fl
             )
         )
     
-    total_count = running_total  # ✅ Correct total
+    total_count = running_total
     if total_count == 0:
         return 0.0
 

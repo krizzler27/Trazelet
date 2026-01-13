@@ -1,22 +1,21 @@
-<center>
+<div align="center">
 
 # Tracelet
 
-**A Lightweight, Zero-Configuration, Plug-on Middleware for Python Web Analytics**
+**A Lightweight, Zero-Configuration Observability Middleware for Python Backends**
+*Seamlessly integrates with FastAPI, Django, and Flask to deliver instant HTTP and API performance insights*
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-*Seamlessly integrates with FastAPI, Django, and Flask to deliver instant API performance insights*
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Purpose](#-built-with-purpose) • [Contributing](/CONTRIBUTING.md)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
-
-</center>
+</div>
 
 ---
 
 ## 🎯 What is Tracelet?
 
-**Tracelet** is a high-performance, open-source Python **Plug-and-play middleware library** designed to provide backend developers with **instant analytics** for their API's performance. It offers instant visibility without the complexity and overhead of traditional enterprise APM tools, seamlessly fitting into any Python web framework with zero configuration.
+**Tracelet** is a high-performance, open-source Python **plug-and-play middleware library** that provides backend developers with **instant HTTP and API performance analytics**. It delivers immediate visibility into request latency without the complexity or overhead of traditional enterprise APM tools, and integrates seamlessly with Python web frameworks with zero configuration.
 
 ### The Problem It Solves
 
@@ -29,7 +28,8 @@ Most developers don't know their API is slow until a user complains. Enterprise 
 - 🎯 **Zero Configuration**: Works out of the box with sensible defaults
 - 🔌 **Framework Agnostic**: Works seamlessly with FastAPI, Django, and Flask
 - ⚡ **Production-Ready**: Thread-safe, battle-tested architecture
-
+- 📊 **Built-in Performance Analytics**: Actionable HTTP and API performance metrics out of the box
+- 💻 **Modern TUI Interface**: Access real-time and historical analytics through a Rich-powered terminal UI
 ---
 
 ## ✨ Features
@@ -312,11 +312,13 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 ---
 
-## 🙏 Acknowledgments
+## 💡 Built With Purpose
 
-- Built with ❤️ for the Python community
-- Inspired by the need for lightweight, privacy-first APM tools
-- Thanks to all contributors and testers
+- **The Vision:** A high-velocity performance tracker tailored for the modern era of API wrappers and micro-services.
+- **Privacy by Design:** Instant analytics that stay in your environment. We provide the logic; you keep the data.
+- **Zero-Config Core:** Works out of the box with sensible defaults, while offering minimal config for those who need it.
+- **Flexible Persistence:** Plug into your existing **PostgreSQL** for production or stay lightweight with **SQLite** by default.
+- **The Community:** Built for the developers who prioritize lean, efficient tools. Thank you to everyone helping us keep this project focused and fast!
 
 ---
 
@@ -330,13 +332,13 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/Tracelet/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/Tracelet/discussions)
+- **Issues**: [GitHub Issues](../../issues)
+- **Discussions**: [GitHub Discussions](../../discussions)
 
 ---
 
-<center>
+<div align="center">
 
-[⭐ Star us on GitHub](https://github.com/yourusername/Tracelet) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](https://github.com/yourusername/Tracelet/issues)
+[⭐ Star us on GitHub](../Tracelet) • [📖 Documentation](docs/architecture_report.md) • [🐛 Report Bug](../../issues)
 
-</center>
+`</div>`

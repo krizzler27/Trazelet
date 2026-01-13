@@ -1,4 +1,3 @@
-# tracelet/utils/services.py
 """
 Analytics service layer.
 Orchestrates AnalyticsEngine, handles time windows, computes health metrics.
@@ -15,8 +14,6 @@ from tracelet.tui.analytics import AnalyticsEngine, estimate_percentile
 from tracelet.tui.caching import lru_cache_decorator
 
 logger = logging.getLogger("tracelet")
-# logger.setLevel('DEBUG')
-
 
 @dataclass
 class EndpointHealthMetrics:
@@ -82,7 +79,7 @@ class AnalyticsService:
     def generate_operational_report(
         self,
         duration_str: str,
-        endpoint_id: Optional[int] = None,
+        endpoint_path: Optional[int] = None,
         no_cache: bool = False
     ) -> Tuple[List[EndpointHealthMetrics], Optional[TimeWindow]]:
         """
@@ -109,10 +106,10 @@ class AnalyticsService:
                 return [], window
             
             # Filter by endpoint_id if provided
-            if endpoint_id:
-                endpoints = [ep for ep in all_endpoints if ep['id'] == endpoint_id]
+            if endpoint_path:
+                endpoints = [ep for ep in all_endpoints if ep['path'] == endpoint_path]
                 if not endpoints:
-                    logger.warning("Endpoint %d not found", endpoint_id)
+                    logger.warning("Endpoint %d not found", endpoint_path)
                     return [], window
             else:
                 endpoints = all_endpoints
@@ -136,11 +133,11 @@ class AnalyticsService:
             for ep in endpoints:
                 eid = ep['id']
                 
-                # Get summary stats (already fetched in batch)
+                # Get summary stats from Step: 3
                 summary = all_summaries.get(eid, {"mean": 0, "max": 0, "total": 0, "errors": 0})
                 apdex = all_apdex_scores.get(eid, 0.0)
                 
-                # Get window metrics (already fetched in batch)
+                # Get window metrics from Step: 3
                 buckets = all_window_metrics.get(eid, [])
                 
                 if not buckets:
@@ -156,7 +153,6 @@ class AnalyticsService:
                 # Calculate operational metrics
                 error_rate = self._calculate_error_percent(summary.get('total', 0), summary.get('errors', 0))
                 throughput = self._calculate_throughput(summary.get('total', 0), window.total_seconds())
-                # Apdex is already fetched in batch
                 
                 # Assign health grade
                 health_grade = self._assign_health_grade(p99, error_rate, apdex)
@@ -255,7 +251,6 @@ class AnalyticsService:
 
             earliest = earliest.replace(tzinfo=timezone.utc)
             latest = latest.replace(tzinfo=timezone.utc)
-            print(start_time, end_time, earliest, latest)
             if earliest and start_time < earliest:
                 logger.info(
                     "Data only available from %s; adjusting window from %s",
@@ -280,11 +275,11 @@ class AnalyticsService:
             C: P99 < 1000ms AND Error% < 10% AND Apdex >= 0.70
             D: Everything else (poor performance)
         """
-        if p99_ms < 200 and error_rate < 1 and apdex >= 0.95:
+        if p99_ms <= 200 and error_rate <= 1 and apdex >= 0.95:
             return "A"
-        elif p99_ms < 500 and error_rate < 5 and apdex >= 0.85:
+        elif p99_ms <= 1000 and error_rate <= 5 and apdex >= 0.85:
             return "B"
-        elif p99_ms < 1000 and error_rate < 10 and apdex >= 0.70:
+        elif p99_ms <= 3000 and error_rate <= 10 and apdex >= 0.70:
             return "C"
         else:
             return "D"

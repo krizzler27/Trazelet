@@ -20,7 +20,7 @@ class DjangoMiddleware:
 
             elapsed = time.perf_counter() - start_perf
             
-            # Path Normalization
+            #  --- Path Normalization ---
             route = getattr(request, 'resolver_match', None)
             if not route:
                 try:
