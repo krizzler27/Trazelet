@@ -3,9 +3,10 @@
 # Tracelet
 
 **A Lightweight, Zero-Configuration Observability Middleware for Python Backends**
+
 *Seamlessly integrates with FastAPI, Django, and Flask to deliver instant HTTP and API performance insights*
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Purpose](#-built-with-purpose) • [Contributing](/CONTRIBUTING.md)
 
@@ -320,7 +321,7 @@ engine.flush_buffer()  # Manually flush queued metrics
 
 ## 📝 License
 
-This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
@@ -337,8 +338,8 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 ## 📚 Additional Resources
 
 - [Architecture report](docs/architecture_report.md) - Comprehensive technical audit
-- [Testing report](docs/Testing_report.md) - Test suite documentation
-- [Tracker](docs/Tracker.md) - Development roadmap and feature tracking
+- [Testing report](docs/testing_report.md) - Test suite documentation
+- [Tracker](docs/Tracker.md) - Development roadmap and feature tracking	
 
 ---
 
