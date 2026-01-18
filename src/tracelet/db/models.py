@@ -14,7 +14,6 @@ class EndpointStatus(Enum):
 
 
 class Endpoints(Base):
-
     __tablename__ = "tracelet_endpoints"
 
     endpoint_id: Mapped[int] = mapped_column(primary_key=True)
@@ -39,7 +38,6 @@ class Endpoints(Base):
 
 
 class Metrics(Base):
-
     __tablename__ = "tracelet_metrics"
 
     metrics_id: Mapped[int] = mapped_column(primary_key=True)

@@ -12,8 +12,9 @@ authors =  [
     {name = "Kriz"},
 ]
 
-# MIT
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
+
 keywords = ["API", "HTTP", "monitoring", "performance", "tracker", "python", "backend", "analytics"]
 
 dependencies = [
@@ -23,6 +24,9 @@ dependencies = [
     "psycopg2>=2.9.11",
     "psycopg2-binary>=2.9.11",
 ]
+
+[project.scripts]
+tracelet = "tracelet.tui.app:app"
 
 [project.urls]
 Repository = "https://github.com/krizzler27/Tracelet"
@@ -44,6 +48,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["tests*", "docs*"]
 
 [tool.ruff]
 line-length = 88

@@ -75,11 +75,6 @@ Most developers don't know their API is slow until a user complains. Enterprise 
 ```bash
 # Core installation
 pip install tracelet
-
-# With framework support (optional)
-pip install tracelet[fastapi]  # For FastAPI
-pip install tracelet[flask]     # For Flask
-pip install tracelet[django]   # For Django
 ```
 
 ### Basic Usage
@@ -149,6 +144,11 @@ tracelet.init(
     max_workers=3,            # Background worker threads
     use_bulk_mode=True,       # Enable bulk insert mode
     logger_level="INFO"       # Logging level
+    BUKCET_THRESHOLDS= [      # Set bucket threashold to classify for histogram in db
+	25, 50, 100,
+	200, 500, 1000,
+	1500, 3000, 5000
+    ]
 )
 ```
 
@@ -210,6 +210,17 @@ Leveraging the robust **Analytics Engine** described in the [Architecture Report
 - 🎯 **Endpoint-Level Granularity**: Analyze individual endpoint performance (latency, errors, throughput, Apdex).
 - 🔍 **Anomaly Detection**: Quickly identify slowest or most error-prone endpoints.
 - 📋 **Flexible Reporting**: View metrics in detailed tables, compact summaries, or JSON for programmatic use.
+
+### ⚙️ Configuring Database Connection via CLI
+
+The `tracelet configure-db` command sets up your database connection following a strict precedence order:
+
+1. **`TRACELET_DB_URL`**: Highest priority, used if set in your environment.
+2. **`DATABASE_URL`**: Used if present, after prompting for confirmation.
+3. **Custom Environment Variable**: Use `--env-var <NAME>` to save an environment variable name in `~/.tracelet/config.json`. Tracelet will read the actual URL from `os.environ[NAME]` on subsequent runs.
+4. **Default SQLite**: If no other sources are found, Tracelet defaults to an internal SQLite database (`sqlite:///tracelet.db`).
+
+Use `tracelet configure-db --reset` to clear any previously saved custom environment variable name and re-evaluate the configuration.
 
 ### Available Commands:
 

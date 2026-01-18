@@ -1,6 +1,6 @@
 import time
 
-import pytest  # type: ignore
+import pytest
 import django
 from django.conf import settings
 from django.http import JsonResponse

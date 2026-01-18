@@ -13,7 +13,6 @@ class FastAPIMiddleware(BaseHTTPMiddleware):
         self.framework = "fastapi"
 
     async def dispatch(self, request: Request, call_next):
-
         try:
             start_perf = time.perf_counter()
             start_dt = datetime.now(timezone.utc)

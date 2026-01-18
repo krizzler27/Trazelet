@@ -1,4 +1,5 @@
 from tracelet.utils.logger_config import logger
+from pathlib import Path
 import json
 
 
@@ -6,20 +7,20 @@ class TraceletConfig:
     def __init__(self):
         self.tables_created = False
         self._logger_level = "INFO"
+        self.CONFIG_DIR = Path.home() / ".tracelet"
+        self.CONFIG_FILE = self.CONFIG_DIR / "config.json"
 
     def configure(self, db_config=None, **kwargs):
-
         logger.info("Initializing Tracelet...")
         logger.info("Setting Up user settings")
 
         self.BUCKET_THRESHOLDS = [
             25, 50, 100,
             200, 300, 500,
-            750, 1000,
-            1500, 2000,
-            3000, 4000, 5000,
-            float('inf')
-        ] 
+            750, 1000, 1500,
+            2000, 3000, 4000,
+            5000, float("inf"),
+        ]
 
         max_workers = kwargs.get("max_workers", 1)
         self.enabled = kwargs.get("enabled", True)
@@ -40,24 +41,23 @@ class TraceletConfig:
         user_settings = {
             "max_workers": self.max_workers,
             "tracelet_enabled": self.enabled,
-            "tracelet_logger_level": logger_level,
-            "db_config": db_config,
-            "database": self.db_type,
+            "logger_level": logger_level,
+            "database_type": self.db_type,
             "batch_size": self.batch_size,
             "flush_interval": self.flush_interval,
             "BUCKET_THRESHOLDS": [
-                10, 25, 50,
-                100, 250, 500,
-                1000, 2500, 5000,
-                float("inf"),
+            25, 50, 100,
+            200, 300, 500,
+            750, 1000, 1500,
+            2000, 3000, 4000,
+            5000, float("inf"),
             ],
             "tracelet_tables_created": self.tables_created,
         }
 
-        with open("settings.json", "w") as f:
-            json.dump(user_settings, f)
+        self.save_config(user_settings)
 
-        logger.info(f"Settings saved in settings.json")
+        logger.info("Tracelet is configured and data are set.")
 
     def configure_db(self, db_config):
         from tracelet.db.config import setup_db
@@ -92,6 +92,10 @@ class TraceletConfig:
         """Set the logger level and update the actual logger."""
         self._logger_level = value
         self.configure_logger(value)
+
+    def save_config(self, config):
+        with open(self.CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
 
 
 # One instance to be shared across the whole project

@@ -13,7 +13,7 @@ Test Case:
 - Expected P50: Should fall in le=100 bucket (150 total requests)
 """
 
-import pytest  # type: ignore
+import pytest
 from tracelet.tui.analytics import HistogramSnapshot, estimate_percentile
 from tracelet.config import settings
 
@@ -54,9 +54,9 @@ def test_cumulative_to_delta_calculation():
         calculated_deltas[le] = delta
 
     # Verify deltas match expected
-    assert (
-        calculated_deltas == expected_deltas
-    ), f"Delta calculation failed. Expected {expected_deltas}, got {calculated_deltas}"
+    assert calculated_deltas == expected_deltas, (
+        f"Delta calculation failed. Expected {expected_deltas}, got {calculated_deltas}"
+    )
 
 
 def test_delta_to_cumulative_conversion():
@@ -98,12 +98,12 @@ def test_delta_to_cumulative_conversion():
     # Verify conversion
     assert len(cumulative) == len(expected_cumulative)
     for i, (actual, expected) in enumerate(zip(cumulative, expected_cumulative)):
-        assert (
-            actual.threshold_ms == expected.threshold_ms
-        ), f"Threshold mismatch at index {i}: {actual.threshold_ms} != {expected.threshold_ms}"
-        assert (
-            actual.cumulative_count == expected.cumulative_count
-        ), f"Count mismatch at index {i}: {actual.cumulative_count} != {expected.cumulative_count}"
+        assert actual.threshold_ms == expected.threshold_ms, (
+            f"Threshold mismatch at index {i}: {actual.threshold_ms} != {expected.threshold_ms}"
+        )
+        assert actual.cumulative_count == expected.cumulative_count, (
+            f"Count mismatch at index {i}: {actual.cumulative_count} != {expected.cumulative_count}"
+        )
 
 
 def test_percentile_calculation_with_deltas():
@@ -176,9 +176,9 @@ def test_missing_buckets_handling():
         500.0: 50,  # 1000 - 950 = 50
     }
 
-    assert (
-        calculated_deltas == expected
-    ), f"Missing bucket handling failed. Expected {expected}, got {calculated_deltas}"
+    assert calculated_deltas == expected, (
+        f"Missing bucket handling failed. Expected {expected}, got {calculated_deltas}"
+    )
 
 
 def test_zero_deltas_included():
@@ -210,15 +210,15 @@ def test_zero_deltas_included():
     # Verify zero delta is included
     zero_deltas = [d for d in deltas if d.cumulative_count == 0]
     assert len(zero_deltas) == 1, f"Expected 1 zero delta, got {len(zero_deltas)}"
-    assert (
-        zero_deltas[0].threshold_ms == 250.0
-    ), "Zero delta should be at 250ms threshold"
+    assert zero_deltas[0].threshold_ms == 250.0, (
+        "Zero delta should be at 250ms threshold"
+    )
 
     # Verify percentile calculation works with zero deltas
     p50 = estimate_percentile(tuple(deltas), 50.0)
-    assert (
-        p50 >= 0
-    ), f"Percentile calculation should handle zero deltas correctly, got {p50}"
+    assert p50 >= 0, (
+        f"Percentile calculation should handle zero deltas correctly, got {p50}"
+    )
 
 
 def test_complete_histogram_snapshot():
@@ -252,9 +252,9 @@ def test_complete_histogram_snapshot():
     snapshot_les = {item["le"] for item in snapshot_data}
     expected_les = set(thresholds)
 
-    assert (
-        snapshot_les == expected_les
-    ), f"Snapshot missing thresholds. Expected {expected_les}, got {snapshot_les}"
+    assert snapshot_les == expected_les, (
+        f"Snapshot missing thresholds. Expected {expected_les}, got {snapshot_les}"
+    )
 
     # Verify counts are correct
     for item in snapshot_data:
@@ -263,9 +263,9 @@ def test_complete_histogram_snapshot():
         elif item["le"] == 250.0:
             assert item["count"] == 800
         else:
-            assert (
-                item["count"] == 0
-            ), f"Missing threshold {item['le']} should have count=0"
+            assert item["count"] == 0, (
+                f"Missing threshold {item['le']} should have count=0"
+            )
 
 
 if __name__ == "__main__":

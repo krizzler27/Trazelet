@@ -403,31 +403,18 @@ def estimate_percentile(
     if not snapshots:
         return 0.0
 
-    # Input snapshots contain DELTAS (not cumulative)
-    # Convert to cumulative distribution
+    # Snapshots are ALREADY cumulative deltas
     sorted_snapshots = sorted(snapshots, key=lambda s: s.threshold_ms)
-
-    cumulative = []
-    running_total = 0
-    for snapshot in sorted_snapshots:
-        running_total += snapshot.cumulative_count  # Sum deltas
-        cumulative.append(
-            HistogramSnapshot(
-                threshold_ms=snapshot.threshold_ms,
-                cumulative_count=running_total,  # Now truly cumulative
-            )
-        )
-
-    total_count = running_total
+    
+    total_count = sorted_snapshots[-1].cumulative_count  # Already cumulative
     if total_count == 0:
         return 0.0
 
     target_rank = (percentile / 100) * total_count
-
     prev_ms = 0.0
     prev_count = 0
 
-    for snapshot in cumulative:  # Use cumulative version
+    for snapshot in sorted_snapshots:
         if snapshot.cumulative_count >= target_rank:
             if snapshot.threshold_ms == float("inf"):
                 return prev_ms

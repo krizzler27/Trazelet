@@ -9,11 +9,11 @@ This project is a work in progress, and your insight is the missing piece. Wheth
 To ensure code quality and consistency, please follow these steps for any contribution:
 
 1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+2. **Create a feature branch** (`git checkout -b feature/feature`)
 3. **Make your changes** (follow PEP8, add tests)
 4. **Run tests** (`pytest`)
-5. **Commit your changes** (`git commit -m 'Add amazing feature'`)
-6. **Push to the branch** (`git push origin feature/amazing-feature`)
+5. **Commit your changes** (`git commit -m 'Adding a feature'`)
+6. **Push to the branch** (`git push origin feature/feature`)
 7. **Open a Pull Request**
 
 ---

@@ -18,7 +18,7 @@ def init(db_config=None, **kwargs):
             - batch_size (int): Number of metrics to accumulate before flushing. (Default: 50)
             - flush_interval (float): Max seconds to wait before flushing metrics. (Default: 5.0)
             - BUCKET_THRESHOLDS (List): Bucket thresholds to classify the captured latemcy in DB.
-              (Default: [25, 50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, float('inf') ])
+              (Default: [25, 50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 4000, 5000, float('inf')])
 
     Example:
         >>> tracelet.init(

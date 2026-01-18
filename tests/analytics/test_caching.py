@@ -2,7 +2,7 @@
 Test suite for caching decorators to verify correctness and cache_bypass functionality.
 """
 
-import pytest  # type: ignore
+import pytest
 import time
 from tracelet.tui.caching import ttl_cache_decorator, lru_cache_decorator
 

@@ -1,6 +1,6 @@
 import time
 
-import pytest  # type: ignore
+import pytest
 from flask import Flask, abort, jsonify, request
 
 import tracelet

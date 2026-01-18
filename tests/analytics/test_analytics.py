@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 
 from tracelet.tui.analytics import AnalyticsEngine, estimate_percentile
 from tracelet.tui.services import AnalyticsService
-from rich.console import Console  # type: ignore
-from rich.table import Table  # type: ignore
+from rich.console import Console
+from rich.table import Table
 from tracelet.db.config import setup_db
 
 db = setup_db(
@@ -267,7 +267,7 @@ def benchmark_analytics():
 
             status = "✓" if report else "✗"
             console.print(
-                f"    {status} {duration:15} {elapsed*1000:6.1f}ms ({len(report)} endpoints)"
+                f"    {status} {duration:15} {elapsed * 1000:6.1f}ms ({len(report)} endpoints)"
             )
 
         console.print("\n[green]✅ Benchmark complete[/green]")

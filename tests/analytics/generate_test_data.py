@@ -12,7 +12,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
-import numpy as np  # type: ignore
+import numpy as np
 from sqlalchemy.orm import Session
 
 from tracelet.db.models import Endpoints, Metrics, Buckets

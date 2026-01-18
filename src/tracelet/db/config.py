@@ -52,7 +52,7 @@ class DBSetup:
         return engine
 
 
-def setup_db(db_config):
+def setup_db(db_config=None):
     """
     This is the ONLY way to get the engine.
     It ensures we never create more than one.

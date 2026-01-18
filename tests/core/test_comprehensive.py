@@ -3,10 +3,9 @@ Comprehensive Test Suite for Tracelet
 Tests: Initialization, Concurrency, Failure Simulation, Edge Cases
 """
 
-import pytest  # type: ignore
+import pytest
 import threading
 import time
-import queue
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 

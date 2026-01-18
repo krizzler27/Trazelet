@@ -1,6 +1,6 @@
 import asyncio
 
-import pytest  # type: ignore
+import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel

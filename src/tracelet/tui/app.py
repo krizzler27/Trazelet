@@ -5,21 +5,23 @@ Modern, interactive analytics interface with real-time feedback.
 
 import json
 import logging
+import os
 from typing import Optional, Callable, TypeVar
 import functools
 from dataclasses import dataclass
 
-import typer  # type: ignore
-from rich.console import Console  # type: ignore
-from rich.table import Table  # type: ignore
-from rich.panel import Panel  # type: ignore
-from rich.text import Text  # type: ignore
-from rich.live import Live  # type: ignore
-from rich.spinner import Spinner  # type: ignore
-from rich import box  # type: ignore
+import typer
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich.live import Live
+from rich.spinner import Spinner
+from rich import box
 
 from tracelet.db.config import setup_db, DBSetup
 from tracelet.tui.services import AnalyticsServiceContext
+from tracelet.config import settings
 
 logger = logging.getLogger("tracelet")
 console = Console()
@@ -34,9 +36,8 @@ app = typer.Typer(
 
 @dataclass
 class CliContext:
-    settings: dict
-    db_setup: DBSetup
-    db_session: object  # SQLAlchemy session
+    db_setup: Optional[DBSetup] = None
+    db_session: Optional[object] = None  # SQLAlchemy session
 
 
 # Type variable for decorator
@@ -60,22 +61,49 @@ def cli_error_handler(f: F) -> F:
     return wrapper
 
 
-def load_settings() -> dict:
-    """Load Tracelet settings from config file."""
+def load_db_env() -> Optional[str]:
+    """Load the database environment variable name from config file, if it exists."""
+    if not settings.CONFIG_FILE.exists():
+        return None
+
     try:
-        with open("settings.json", "r") as f:
-            settings = json.load(f)
-        logger.debug("Settings loaded from settings.json")
-        return settings
-    except FileNotFoundError:
-        console.print("[red]✗ Error: settings.json not found[/red]")
-        console.print(
-            "[yellow]Run [bold]tracelet init[/bold] first to configure[/yellow]"
-        )
-        raise typer.Exit(code=1)
+        with open(settings.CONFIG_FILE, "r") as f:
+            config = json.load(f)
+        db_env_var_name = config.get("db_env_variable_name")
+        if db_env_var_name:
+            logger.debug(
+                f"DB environment variable name '{db_env_var_name}' loaded from config.json"
+            )
+        return db_env_var_name
+
     except json.JSONDecodeError:
-        console.print("[red]✗ Error: settings.json is invalid JSON[/red]")
-        raise typer.Exit(code=1)
+        logger.warning(
+            "Config file is corrupted. Starting with no database environment variable set."
+        )
+        return None
+
+
+def save_db_env(env_var_name: Optional[str]):
+    """Save the database environment variable name to config.json."""
+    settings.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    current_config = {}
+    if settings.CONFIG_FILE.exists():
+        try:
+            with open(settings.CONFIG_FILE, "r") as f:
+                current_config = json.load(f)
+        except json.JSONDecodeError:
+            logger.warning(
+                f"Config file {settings.CONFIG_FILE} is corrupted. Overwriting."
+            )
+
+    if env_var_name:
+        current_config["db_env_variable_name"] = env_var_name
+    else:
+        current_config.pop("db_env_variable_name", None)
+
+    with open(settings.CONFIG_FILE, "w") as f:
+        json.dump(current_config, f, indent=2)
+    logger.debug(f"DB environment variable name {env_var_name} stored in config.json")
 
 
 # ============================================================================
@@ -319,6 +347,12 @@ def status(
       tracelet status -d "7 days"
     """
     session = ctx.obj.db_session
+    if not session:
+        console.print(
+            "[red]✗ Error: Database not configured. Run [bold]tracelet configure-db[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     with Live(
         Panel(
             Spinner("dots", text=f"[cyan]Analyzing {duration}...[/cyan]"),
@@ -359,8 +393,7 @@ def status(
     console.print(
         Panel(
             Text(
-                f"All Systems Operational\n"
-                f"{healthy}/{len(report)} endpoints healthy",
+                f"All Systems Operational\n{healthy}/{len(report)} endpoints healthy",
                 justify="center",
             ),
             title=f"{status_emoji} Health Report: {window.label}",
@@ -416,6 +449,11 @@ def describe(
       tracelet describe --sort error -f compact
     """
     session = ctx.obj.db_session
+    if not session:
+        console.print(
+            "[red]✗ Error: Database not configured. Run [bold]tracelet configure-db[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
 
     with Live(
         Panel(
@@ -482,6 +520,11 @@ def top(
       tracelet top -m slowest
     """
     session = ctx.obj.db_session
+    if not session:
+        console.print(
+            "[red]✗ Error: Database not configured. Run [bold]tracelet configure-db[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
 
     with Live(
         Panel(
@@ -557,6 +600,11 @@ def list_endpoints(
       tracelet list --method GET
     """
     session = ctx.obj.db_session
+    if not session:
+        console.print(
+            "[red]✗ Error: Database not configured. Run [bold]tracelet configure-db[/bold] first.[/red]"
+        )
+        raise typer.Exit(code=1)
 
     with AnalyticsServiceContext(session) as service:
         endpoints = service.engine.fetch_active_endpoints(cache_bypass=no_cache)
@@ -604,22 +652,197 @@ def list_endpoints(
     )
 
 
+@app.command()
+@cli_error_handler
+def configure_db(
+    ctx: typer.Context,
+    env_var: Optional[str] = typer.Option(
+        None,
+        "--env-var",
+        "-ev",
+        help="Provide a custom environment variable name for the DB URL. This will be persisted.",
+    ),
+    reset: bool = typer.Option(
+        False,
+        "--reset",
+        "-r",
+        help="Clear any saved custom environment variable name from config.json.",
+    ),
+):
+    """
+    ⚙️ Configure Database — Set up your Tracelet database connection.
+
+    This command guides you through configuring the database connection for Tracelet.
+    The database URL is resolved from environment variables in a specific order.
+
+    [bold]Resolution Precedence:[/bold]
+    \b
+    1.  `TRACELET_DB_URL` environment variable (highest priority, always used if present).
+    2.  `DATABASE_URL` environment variable (if `TRACELET_DB_URL` is not set, user will be prompted for confirmation).
+    3.  A custom environment variable name previously saved via `tracelet configure-db --env-var <NAME>`.
+    4.  Default to an internal SQLite database (`sqlite:///tracelet.db`) if no other options are confirmed or available.
+
+    [bold]Options:[/bold]
+    \b
+    *   `--env-var/-ev <NAME>`: Provide a custom environment variable name (e.g., `MY_APP_DB_URL`) to persist for Tracelet to use. This name will be saved in `~/.tracelet/config.json`. The actual database URL will be read from `os.environ[NAME]`.
+    *   `--reset/-r`: Clear any custom environment variable name previously saved in `~/.tracelet/config.json`. After resetting, the command will proceed with the standard resolution precedence (checking `TRACELET_DB_URL`, then `DATABASE_URL`, then defaulting to SQLite if needed).
+
+    [bold]Examples:[/bold]
+    \b
+      tracelet configure-db --env-var MY_DB_CONNECTION # Save and use MY_DB_CONNECTION
+      tracelet configure-db --reset                    # Clear saved env var and starts re-configure
+      tracelet configure-db                            # Use existing config or go through interactive setup
+    """
+    if env_var and reset:
+        console.print(
+            "[red]✗ Error: Cannot use both --env-var and --reset simultaneously.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    db_setup = None
+    db_session = None
+
+    if reset:
+        save_db_env(None)
+        console.print(
+            "[green]✓ Cleared any previously saved custom database environment variable name.[/green]"
+        )
+        # After reset, proceed to configure with the new interactive logic
+        try:
+            db_setup, db_session = _get_session()
+        except Exception as e:
+            console.print(f"[red]✗ Error configuring database after reset: {e}[/red]")
+            raise typer.Exit(code=1)
+    elif env_var:
+        try:
+            db_setup, db_session = _get_session(env_var)
+            save_db_env(env_var)
+        except Exception as e:
+            console.print(
+                f"[red]✗ Error configuring database from provided environment variable '{env_var}': {e}[/red]"
+            )
+            save_db_env(None)  # Clear config if initial setup fails
+            raise typer.Exit(code=1)
+    else:
+        try:
+            db_setup, db_session = _get_session()
+        except Exception as e:
+            console.print(
+                f"[red]✗ Error during interactive database configuration: {e}[/red]"
+            )
+            raise typer.Exit(code=1)
+
+    ctx.obj = CliContext(db_setup=db_setup, db_session=db_session)
+
+    console.print("[green]✓ Database configured successfully![/green]")
+    console.print(
+        "[yellow]You can now run other commands like [bold]tracelet status[/bold].[/yellow]"
+    )
+
+
+_db_session_cache = None
+
+
+def _get_session(env_var=None, skip_if_cached=False):
+    """
+    Resolve database URL and return configured session.
+    Priority: env_var > TRACELET_DB_URL > saved config > DATABASE_URL > interactive
+
+    Args:
+        env_var: Optional explicit environment variable name
+        skip_if_cached: If True, return cached session if available (skip setup)
+    """
+
+    global _db_session_cache
+
+    # Return cached session if available and skip requested
+    if skip_if_cached and _db_session_cache:
+        return _db_session_cache
+
+    database_url = None
+
+    # Priority 1: Explicit env_var parameter
+    if env_var:
+        if not os.environ.get(env_var):
+            raise ValueError(f"Environment variable '{env_var}' not set")
+        database_url = os.environ.get(env_var)
+        console.print(f"[green]✓ Using {env_var}[/green]")
+
+    # Priority 2: TRACELET_DB_URL
+    elif os.environ.get("TRACELET_DB_URL"):
+        database_url = os.environ.get("TRACELET_DB_URL")
+        console.print("[green]✓ Using TRACELET_DB_URL[/green]")
+
+    # Priority 3: Saved config env var
+    elif saved_env := load_db_env():
+        if saved_env == "__SQLITE_DEFAULT__":
+            database_url = "sqlite:///tracelet.db"
+            console.print("[green]✓ Using saved config: SQLite default[/green]")
+        elif os.environ.get(saved_env):
+            database_url = os.environ.get(saved_env)
+            console.print(f"[green]✓ Using saved config: {saved_env}[/green]")
+        else:
+            console.print(
+                f"[yellow]Warning: Saved env '{saved_env}' not found[/yellow]"
+            )
+            save_db_env(None)  # Clear invalid config
+
+    # Priority 4: DATABASE_URL (with y/n confirmation)
+    if not database_url and os.environ.get("DATABASE_URL"):
+        if typer.confirm("Found DATABASE_URL. Use for Tracelet? [y/n]", default=False):
+            database_url = os.environ.get("DATABASE_URL")
+            console.print("[green]✓ Using DATABASE_URL[/green]")
+        else:
+            console.print("[yellow]Ignored DATABASE_URL[/yellow]")
+
+    # Priority 5: Interactive prompt
+    if not database_url:
+        console.print("\n[yellow]Database not configured[/yellow]")
+        choice = typer.prompt(
+            "Configure database:\n"
+            "1) Enter environment variable name\n"
+            "2) Use default SQLite\n"
+            "Choice [1/2]",
+            type=int,
+            default=2,
+        )
+
+        if choice == 1:
+            env_name = typer.prompt("Environment variable name")
+            if not os.environ.get(env_name):
+                raise ValueError(f"'{env_name}' not set in environment")
+            database_url = os.environ.get(env_name)
+            save_db_env(env_name)  # Persist choice
+            console.print(f"[green]✓ Using {env_name}[/green]")
+        elif choice == 2:
+            database_url = "sqlite:///tracelet.db"
+            save_db_env("__SQLITE_DEFAULT__")
+            console.print("[green]✓ Using default SQLite: tracelet.db[/green]")
+        else:
+            console.print("[red]✗ Invalid Choice, Try Again!!![/red]")
+            raise ValueError("Invalid Choice")
+
+    db = setup_db({"db_url": database_url})
+    _db_session_cache = (db, db.SessionLocal())
+
+    return _db_session_cache
+
+
 @app.callback()
 def main(ctx: typer.Context):
-    """Tracelet CLI — Modern API Performance Analytics."""
-    try:
-        settings_data = load_settings()
-        db_setup = setup_db(settings_data.get("db_config", {}))
-        db_session = db_setup.SessionLocal()
-        ctx.obj = CliContext(
-            settings=settings_data, db_setup=db_setup, db_session=db_session
-        )
-    except typer.Exit:
-        raise
-    except Exception as e:
-        logger.error("Error during CLI startup: %s", e, exc_info=True)
-        console.print(f"[red]✗ Error during startup: {e}[/red]")
-        raise typer.Exit(code=1)
+    """Tracelet CLI - Modern API Performance Analytics."""
+    # Initialize ctx.obj if it's not already set.
+    if ctx.obj is None:
+        db_setup = None
+        db_session = None
+        try:
+            db_setup, db_session = _get_session(skip_if_cached=True)
+        except Exception as e:
+            console.print(
+                f"[red]✗ Warning: Database initialization failed: {e}. Commands requiring a database may not work.[/red]"
+            )
+
+        ctx.obj = CliContext(db_setup=db_setup, db_session=db_session)
 
     # Register cleanup on exit
     def _cleanup_session():

@@ -12,7 +12,6 @@ class DjangoMiddleware:
         self.engine = engine or get_engine()
 
     def __call__(self, request):
-
         try:
             start_perf = time.perf_counter()
             start_dt = datetime.now(timezone.utc)
