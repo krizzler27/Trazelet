@@ -2,6 +2,13 @@ import re
 from tracelet import settings
 import bisect
 
+# Pre-compiled regular expressions for performance
+UUID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+ID_PATTERN = re.compile(r"/\d+(?=/|$)")
+SENSITIVE_PATTERN = re.compile(r"(token|auth|secret|password)/[^/]+")
+
 
 def format_as_seconds(duration: float) -> str:
     """Formats a duration in seconds into a human-readable string with appropriate precision."""
@@ -28,22 +35,15 @@ def clean_url_path(path: str) -> str:
     # 2. The "Normalization" Step
     # This catches IDs/UUIDs if the framework didn't already normalize them
     # Replace UUIDs with <uuid>
-    path = re.sub(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "<uuid>", path
-    )
+    path = UUID_PATTERN.sub("<uuid>", path)
 
     # 3. Replace Numeric IDs with <id>
     # (Matches digits between slashes or at the end of a string)
-    path = re.sub(r"/\d+(?=/|$)", "/<id>", path)
+    path = ID_PATTERN.sub("/<id>", path)
 
     # 4. Security Masking (Basic)
     # If there are query params left or sensitive words in path
-
-    sensitive_patterns = ["token", "auth", "secret", "password"]
-    for word in sensitive_patterns:
-        if word in path:
-            # Basic masking logic
-            path = re.sub(rf"{word}/[^/]+", f"{word}/<masked>", path)
+    path = SENSITIVE_PATTERN.sub(r"\1/<masked>", path)
 
     return path
 
